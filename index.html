@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hero Particle Animation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            background: #000;
+            overflow-x: hidden;
+        }
+        
+        #hero-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        #three-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        
+
+        
+        .content-section {
+            min-height: 100vh;
+            padding: 50px;
+            background: linear-gradient(45deg, #1a1a1a, #2a2a2a);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+    </style>
+</head>
+<body>
+    <div id="hero-container">
+        <canvas id="three-canvas"></canvas>
+        
+
+    </div>
+    
+    <div class="content-section">
+        <div>
+            <h2>Section 2 - Scroll to test transition</h2>
+            <p>This section demonstrates the scroll-driven transition from the hero particle animation.</p>
+        </div>
+    </div>
+    
+    <div class="content-section">
+        <div>
+            <h2>Section 3 - Performance test</h2>
+            <p>When this section is in view, the hero animation should be paused for performance.</p>
+        </div>
+    </div>
+    
+    <script type="module" src="/src/main.js"></script>
+</body>
+</html>
