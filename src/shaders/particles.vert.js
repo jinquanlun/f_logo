@@ -1,9 +1,10 @@
 export const particleVertexShader = `
+precision highp float;
+
 uniform sampler2D uBasePositions;
 uniform float uPointSize;
 
 varying vec2 vUv;
-attribute vec2 uv;
 
 void main() {
     vUv = uv;
@@ -17,12 +18,14 @@ void main() {
     vec4 projectedPosition = projectionMatrix * viewPosition;
     
     gl_Position = projectedPosition;
-    gl_PointSize = uPointSize;
-    
-    // Calculate distance-based size falloff
+
+    // Enhanced distance-based size calculation for better clarity
     float distance = length(viewPosition.xyz);
-    gl_PointSize *= (1000.0 / distance);
-    
-    // Clamp point size
-    gl_PointSize = clamp(gl_PointSize, 1.0, 10.0);
+
+    // Smoother distance falloff with better scaling
+    float sizeFactor = 1200.0 / (distance + 100.0); // Softer falloff curve
+    gl_PointSize = uPointSize * sizeFactor;
+
+    // Better size clamping for improved visibility
+    gl_PointSize = clamp(gl_PointSize, 2.0, 12.0); // Larger range for better detail
 }`

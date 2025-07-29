@@ -1,7 +1,6 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { HeroParticleSystem } from './HeroParticleSystem.js'
 
 class HeroParticleApp {
@@ -51,17 +50,135 @@ class HeroParticleApp {
         // Animation clock
         this.clock = new THREE.Clock()
 
-        // Set up camera controls with smooth settings
-        this.controls = new OrbitControls(this.camera, this.canvas)
-        this.controls.enableDamping = true
-        this.controls.dampingFactor = 0.08
-        this.controls.screenSpacePanning = false
-        this.controls.minDistance = 1
-        this.controls.maxDistance = 100
-        this.controls.maxPolarAngle = Math.PI / 2
-        this.controls.rotateSpeed = 0.5
-        this.controls.zoomSpeed = 0.8
-        this.controls.panSpeed = 0.8
+        // Cinematic camera system
+        this.setupCinematicCamera()
+    }
+
+    setupCinematicCamera() {
+        // Define two cinematic viewpoints
+        this.cameraPositions = [
+            {
+                // Position 1: Dramatic angle from upper right
+                position: new THREE.Vector3(8, 6, 12),
+                target: new THREE.Vector3(0, 0, 0),
+                name: "Hero Angle"
+            },
+            {
+                // Position 2: Close-up detail view from lower left
+                position: new THREE.Vector3(-10, -4, 8),
+                target: new THREE.Vector3(2, 1, -1),
+                name: "Detail View"
+            }
+        ]
+
+        // Animation state
+        this.currentCameraIndex = 0
+        this.cameraTransitionTime = 0
+        this.cameraHoldTime = 0
+        this.isTransitioning = false
+
+        // Timing settings (in seconds) - longer for more cinematic feel
+        this.holdDuration = 5.5      // How long to hold each position
+        this.transitionDuration = 4.0 // Longer transitions for smoother movement
+
+        // Set initial camera position
+        this.setCameraToPosition(0)
+    }
+
+    setCameraToPosition(index) {
+        const pos = this.cameraPositions[index]
+        this.camera.position.copy(pos.position)
+        this.camera.lookAt(pos.target)
+    }
+
+    updateCinematicCamera(deltaTime) {
+        if (this.isTransitioning) {
+            // Currently transitioning between positions
+            this.cameraTransitionTime += deltaTime
+            const progress = Math.min(this.cameraTransitionTime / this.transitionDuration, 1.0)
+
+            // Ultra-smooth organic easing function
+            const easedProgress = this.organicEaseInOut(progress)
+
+            // Get current and next positions
+            const currentPos = this.cameraPositions[this.currentCameraIndex]
+            const nextIndex = (this.currentCameraIndex + 1) % this.cameraPositions.length
+            const nextPos = this.cameraPositions[nextIndex]
+
+            // Create curved path for more organic movement
+            const curvedPosition = this.createCurvedPath(currentPos.position, nextPos.position, easedProgress)
+            const curvedTarget = this.createCurvedPath(currentPos.target, nextPos.target, easedProgress)
+
+            // Apply the curved interpolation
+            this.camera.position.copy(curvedPosition)
+            this.camera.lookAt(curvedTarget)
+
+            // Check if transition is complete
+            if (progress >= 1.0) {
+                this.isTransitioning = false
+                this.currentCameraIndex = nextIndex
+                this.cameraHoldTime = 0
+                this.cameraTransitionTime = 0
+            }
+        } else {
+            // Currently holding at a position with enhanced organic movement
+            this.cameraHoldTime += deltaTime
+
+            // More subtle and organic breathing effects
+            const currentPos = this.cameraPositions[this.currentCameraIndex]
+            const time = this.cameraHoldTime
+
+            // Multiple layered sine waves for organic movement
+            const breathingY = Math.sin(time * 0.6) * 0.08 + Math.sin(time * 1.3) * 0.03
+            const floatingX = Math.cos(time * 0.4) * 0.04 + Math.sin(time * 0.9) * 0.02
+            const driftZ = Math.sin(time * 0.3) * 0.03
+
+            // Apply subtle organic movement
+            this.camera.position.copy(currentPos.position)
+            this.camera.position.y += breathingY
+            this.camera.position.x += floatingX
+            this.camera.position.z += driftZ
+            this.camera.lookAt(currentPos.target)
+
+            // Check if it's time to start next transition
+            if (this.cameraHoldTime >= this.holdDuration) {
+                this.isTransitioning = true
+                this.cameraTransitionTime = 0
+            }
+        }
+    }
+
+    // Ultra-smooth organic easing function for natural camera movement
+    organicEaseInOut(t) {
+        // Combination of multiple easing curves for organic feel
+        const quintic = t < 0.5 ? 16 * t * t * t * t * t : 1 - Math.pow(-2 * t + 2, 5) / 2
+        const sine = (1 - Math.cos(t * Math.PI)) / 2
+
+        // Blend the curves for ultra-smooth organic movement
+        return quintic * 0.7 + sine * 0.3
+    }
+
+    // Create curved path between two points for more natural camera movement
+    createCurvedPath(startPos, endPos, t) {
+        // Create a control point for the curve (slightly offset for natural arc)
+        const midPoint = new THREE.Vector3().lerpVectors(startPos, endPos, 0.5)
+
+        // Add perpendicular offset to create gentle arc
+        const direction = new THREE.Vector3().subVectors(endPos, startPos).normalize()
+        const perpendicular = new THREE.Vector3(-direction.z, direction.y, direction.x)
+        const arcHeight = startPos.distanceTo(endPos) * 0.15 // Subtle arc
+
+        midPoint.add(perpendicular.multiplyScalar(arcHeight))
+
+        // Quadratic Bezier curve interpolation
+        const oneMinusT = 1 - t
+        const result = new THREE.Vector3()
+
+        result.x = oneMinusT * oneMinusT * startPos.x + 2 * oneMinusT * t * midPoint.x + t * t * endPos.x
+        result.y = oneMinusT * oneMinusT * startPos.y + 2 * oneMinusT * t * midPoint.y + t * t * endPos.y
+        result.z = oneMinusT * oneMinusT * startPos.z + 2 * oneMinusT * t * midPoint.z + t * t * endPos.z
+
+        return result
     }
     
     async loadModel() {
@@ -97,23 +214,65 @@ class HeroParticleApp {
     
     fitCameraToModel() {
         if (!this.model) return
-        
+
+        // Calculate model bounds for reference
         const box = new THREE.Box3().setFromObject(this.model)
         const size = box.getSize(new THREE.Vector3()).length()
         const center = box.getCenter(new THREE.Vector3())
-        
-        this.camera.position.copy(center)
-        this.camera.position.x += size / 1.5
-        this.camera.position.y += size / 2.0
-        this.camera.position.z += size / 1.5
-        this.camera.lookAt(center)
 
-        // Update orbit controls target
-        this.controls.target.copy(center)
-        this.controls.update()
+        // Update cinematic camera positions based on model size and center
+        // Optimized distances for enhanced particle detail visibility
+        this.cameraPositions = [
+            {
+                // Position 1: Wide establishing shot from upper right
+                position: new THREE.Vector3(
+                    center.x + size * 0.45,
+                    center.y + size * 0.35,
+                    center.z + size * 0.55
+                ),
+                target: new THREE.Vector3(
+                    center.x + size * 0.02,
+                    center.y - size * 0.01,
+                    center.z
+                ),
+                name: "Establishing Shot"
+            },
+            {
+                // Position 2: Dynamic close-up from lower left
+                position: new THREE.Vector3(
+                    center.x - size * 0.52,
+                    center.y - size * 0.03,
+                    center.z + size * 0.38
+                ),
+                target: new THREE.Vector3(
+                    center.x + size * 0.08,
+                    center.y + size * 0.06,
+                    center.z - size * 0.03
+                ),
+                name: "Dynamic Close-up"
+            },
+            {
+                // Position 3: Dramatic low angle from front
+                position: new THREE.Vector3(
+                    center.x + size * 0.08,
+                    center.y - size * 0.32,
+                    center.z + size * 0.62
+                ),
+                target: new THREE.Vector3(
+                    center.x - size * 0.01,
+                    center.y + size * 0.18,
+                    center.z + size * 0.02
+                ),
+                name: "Hero Low Angle"
+            }
+        ]
 
-        this.cameraCenter = center
-        this.cameraDistance = size
+        // Reset camera animation state and set initial position
+        this.currentCameraIndex = 0
+        this.cameraTransitionTime = 0
+        this.cameraHoldTime = 0
+        this.isTransitioning = false
+        this.setCameraToPosition(0)
     }
     
     setupEventListeners() {
@@ -128,14 +287,19 @@ class HeroParticleApp {
     animate() {
         requestAnimationFrame(() => this.animate())
 
-        // Get smooth delta time
+        // Get smooth delta time with better frame rate consistency
         let deltaTime = this.clock.getDelta()
 
-        // Smooth deltaTime for consistent animation
-        deltaTime = Math.min(deltaTime, 1/30)
+        // More aggressive smoothing for ultra-smooth animation
+        deltaTime = Math.min(deltaTime, 1/20) // Cap at 20fps minimum for smoother motion
 
-        // Update controls
-        this.controls.update()
+        // Apply temporal smoothing to reduce jitter
+        if (!this.lastDeltaTime) this.lastDeltaTime = deltaTime
+        deltaTime = this.lastDeltaTime * 0.1 + deltaTime * 0.9 // Smooth blend
+        this.lastDeltaTime = deltaTime
+
+        // Update cinematic camera system
+        this.updateCinematicCamera(deltaTime)
 
         // Update particle system
         if (this.particleSystem) {
