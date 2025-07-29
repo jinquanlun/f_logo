@@ -17,13 +17,13 @@ class HeroParticleApp {
         // Scene setup
         this.scene = new THREE.Scene()
 
-        // Deeper blue background
-        this.scene.background = new THREE.Color(0x0a0a2a)
+        // Deep ocean gradient background - blue-black with subtle gradient
+        this.createGradientBackground()
         
         // Camera setup
         const aspect = window.innerWidth / window.innerHeight
         this.camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000)
-        this.camera.position.set(5, 5, 5)
+        this.camera.position.set(4, 4, 4)
         
         // Renderer setup
         this.renderer = new THREE.WebGLRenderer({ 
@@ -52,6 +52,32 @@ class HeroParticleApp {
 
         // Cinematic camera system
         this.setupCinematicCamera()
+    }
+
+    createGradientBackground() {
+        // Create a canvas for the gradient
+        const canvas = document.createElement('canvas')
+        canvas.width = 512
+        canvas.height = 512
+
+        const context = canvas.getContext('2d')
+
+        // Create vertical gradient - very deep ocean blue, almost black
+        const gradient = context.createLinearGradient(0, 0, 0, canvas.height)
+        gradient.addColorStop(0, '#000205')    // Almost black with tiny blue hint at top
+        gradient.addColorStop(0.6, '#000408')  // Very deep navy blue in middle
+        gradient.addColorStop(1, '#000103')    // Nearly black at bottom
+
+        // Fill the canvas with gradient
+        context.fillStyle = gradient
+        context.fillRect(0, 0, canvas.width, canvas.height)
+
+        // Create texture from canvas
+        const texture = new THREE.CanvasTexture(canvas)
+        texture.mapping = THREE.EquirectangularReflectionMapping
+
+        // Apply as background
+        this.scene.background = texture
     }
 
     setupCinematicCamera() {
@@ -224,30 +250,31 @@ class HeroParticleApp {
         // Optimized distances for enhanced particle detail visibility
         this.cameraPositions = [
             {
-                // Position 1: Extreme close-up from left - fills entire frame for maximum impact
+                // Position 1: Interior upward view - dramatic wormhole perspective
                 position: new THREE.Vector3(
-                    center.x - size * 0.27,
-                    center.y + size * 0.03,
-                    center.z + size * 0.30
+                   center.x + size * -0.212,                // X轴：摄像机在模型中心
+                   center.y + size * 0.159,  // Y轴：摄像机在结构底部
+                   center.z + size * 0.018
+                   // Z轴：摄像机在模型中心深度
                 ),
                 target: new THREE.Vector3(
-                    center.x,
-                    center.y,
-                    center.z
+                    center.x + size * 0.633,              // X轴：直视上方，无偏移
+                    center.y + size * -0.094,  // Y轴：看向结构顶部开口
+                    center.z + size * -0.510                // Z轴：直视上方，无偏移
                 ),
-                name: "Extreme Close-up"
+                name: "Interior Upward View"
             },
             {
                 // Position 2: Intimidating low angle - creates towering, imposing presence
                 position: new THREE.Vector3(
-                    center.x + size * 0.02,
-                    center.y - size * 0.15,  // 从 -0.28 调整为 -0.15 (提高摄像机位置)
-                    center.z + size * 0.30
+                    center.x + size * 0.04,
+                    center.y + size * 0.004,  // 从 -0.28 调整为 -0.15 (提高摄像机位置)
+                    center.z + size * 0.088
                 ),
                 target: new THREE.Vector3(
-                    center.x - size * 0.05,
-                    center.y + size * 0.05,  // 从 +0.20 调整为 +0.05 (降低目标点)
-                    center.z + size * 0.02
+                    center.x - size * 0.606,
+                    center.y - size * 0.095,  // 从 +0.20 调整为 +0.05 (降低目标点)
+                    center.z + size * -0.750
                 ),
                 name: "Intimidating Low Angle"
             }
