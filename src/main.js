@@ -224,46 +224,46 @@ class HeroParticleApp {
         // Optimized distances for enhanced particle detail visibility
         this.cameraPositions = [
             {
-                // Position 1: Wide establishing shot from upper right
+                // Position 1: Ultra close-up shot - maximum visual impact and overwhelming presence
                 position: new THREE.Vector3(
-                    center.x + size * 0.45,
-                    center.y + size * 0.35,
-                    center.z + size * 0.55
+                    center.x + size * 0.12,
+                    center.y + size * 0.02,
+                    center.z + size * 0.15
                 ),
                 target: new THREE.Vector3(
-                    center.x + size * 0.02,
-                    center.y - size * 0.01,
+                    center.x,
+                    center.y,
                     center.z
                 ),
-                name: "Establishing Shot"
+                name: "Ultra Close-up"
             },
             {
-                // Position 2: Dynamic close-up from lower left
+                // Position 2: Extreme close-up from left - fills entire frame for maximum impact
                 position: new THREE.Vector3(
-                    center.x - size * 0.52,
-                    center.y - size * 0.03,
-                    center.z + size * 0.38
+                    center.x - size * 0.14,
+                    center.y + size * 0.04,
+                    center.z + size * 0.11
                 ),
                 target: new THREE.Vector3(
-                    center.x + size * 0.08,
-                    center.y + size * 0.06,
-                    center.z - size * 0.03
+                    center.x,
+                    center.y,
+                    center.z
                 ),
-                name: "Dynamic Close-up"
+                name: "Extreme Close-up"
             },
             {
-                // Position 3: Dramatic low angle from front
+                // Position 3: Intimidating low angle - creates towering, imposing presence
                 position: new THREE.Vector3(
-                    center.x + size * 0.08,
-                    center.y - size * 0.32,
-                    center.z + size * 0.62
+                    center.x + size * 0.05,
+                    center.y - size * 0.28,
+                    center.z + size * 0.35
                 ),
                 target: new THREE.Vector3(
                     center.x - size * 0.01,
-                    center.y + size * 0.18,
+                    center.y + size * 0.15,
                     center.z + size * 0.02
                 ),
-                name: "Hero Low Angle"
+                name: "Intimidating Low Angle"
             }
         ]
 
