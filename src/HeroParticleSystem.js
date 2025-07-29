@@ -53,28 +53,11 @@ export class HeroParticleSystem {
         this.boneCount = this.skinnedMesh.skeleton ? this.skinnedMesh.skeleton.bones.length : 0
         
         // Create particle system
-        this.createParticleGeometry(processedData)
+        this.createParticleGeometry()
         this.createParticleMaterial(processedData)
         this.createParticleObject()
         
-        // Debug: Check initial bone states
-        if (this.skinnedMesh && this.skinnedMesh.skeleton) {
-            console.log('Skeleton bones:', this.skinnedMesh.skeleton.bones.length)
-            console.log('All bone names:', this.skinnedMesh.skeleton.bones.map(bone => bone.name))
 
-            this.skinnedMesh.skeleton.bones.forEach((bone) => {
-                if (bone.name.includes('00100.001') || bone.name.includes('vipAction.001')) {
-                    console.log(`Initial state of smallest ring bone "${bone.name}":`, {
-                        position: bone.position.clone(),
-                        rotation: bone.rotation.clone(),
-                        quaternion: bone.quaternion.clone(),
-                        scale: bone.scale.clone()
-                    })
-                }
-            })
-        } else {
-            console.log('No skinned mesh or skeleton found')
-        }
 
         // Find and store references to smallest ring objects
         this.findSmallestRingObjects()
@@ -185,7 +168,7 @@ export class HeroParticleSystem {
                 basePositionTexture
             }
             
-            this.createParticleGeometry(processedData)
+            this.createParticleGeometry()
             this.createParticleMaterial(processedData)
             this.createParticleObject()
 
@@ -199,7 +182,7 @@ export class HeroParticleSystem {
         }
     }
     
-    createParticleGeometry(processedData) {
+    createParticleGeometry() {
         this.particleGeometry = new THREE.BufferGeometry()
 
         // Create UV coordinates for each particle to sample textures
@@ -237,7 +220,6 @@ export class HeroParticleSystem {
             this.particleMaterial.needsUpdate = true
 
         } catch (error) {
-            console.error('❌ Error creating particle material:', error)
             // Fallback to basic material
             this.particleMaterial = new THREE.PointsMaterial({
                 color: 0x4488ff,
@@ -379,7 +361,7 @@ export class HeroParticleSystem {
             this.particleMaterial.uniforms.uTime.value += ultraSmoothDelta
         }
 
-        // TODO: Update particle positions based on bone transforms
+
     }
     
     toggleVisibility() {

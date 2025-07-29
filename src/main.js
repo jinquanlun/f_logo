@@ -17,8 +17,8 @@ class HeroParticleApp {
         // Scene setup
         this.scene = new THREE.Scene()
 
-        // Pure black background
-        this.scene.background = new THREE.Color(0x000000)
+        // Deeper blue background
+        this.scene.background = new THREE.Color(0x0a0a2a)
         
         // Camera setup
         const aspect = window.innerWidth / window.innerHeight
@@ -224,25 +224,11 @@ class HeroParticleApp {
         // Optimized distances for enhanced particle detail visibility
         this.cameraPositions = [
             {
-                // Position 1: Ultra close-up shot - maximum visual impact and overwhelming presence
+                // Position 1: Extreme close-up from left - fills entire frame for maximum impact
                 position: new THREE.Vector3(
-                    center.x + size * 0.12,
-                    center.y + size * 0.02,
-                    center.z + size * 0.15
-                ),
-                target: new THREE.Vector3(
-                    center.x,
-                    center.y,
-                    center.z
-                ),
-                name: "Ultra Close-up"
-            },
-            {
-                // Position 2: Extreme close-up from left - fills entire frame for maximum impact
-                position: new THREE.Vector3(
-                    center.x - size * 0.14,
-                    center.y + size * 0.04,
-                    center.z + size * 0.11
+                    center.x - size * 0.27,
+                    center.y + size * 0.03,
+                    center.z + size * 0.30
                 ),
                 target: new THREE.Vector3(
                     center.x,
@@ -252,15 +238,15 @@ class HeroParticleApp {
                 name: "Extreme Close-up"
             },
             {
-                // Position 3: Intimidating low angle - creates towering, imposing presence
+                // Position 2: Intimidating low angle - creates towering, imposing presence
                 position: new THREE.Vector3(
-                    center.x + size * 0.05,
-                    center.y - size * 0.28,
-                    center.z + size * 0.35
+                    center.x + size * 0.02,
+                    center.y - size * 0.15,  // 从 -0.28 调整为 -0.15 (提高摄像机位置)
+                    center.z + size * 0.30
                 ),
                 target: new THREE.Vector3(
-                    center.x - size * 0.01,
-                    center.y + size * 0.15,
+                    center.x - size * 0.05,
+                    center.y + size * 0.05,  // 从 +0.20 调整为 +0.05 (降低目标点)
                     center.z + size * 0.02
                 ),
                 name: "Intimidating Low Angle"
