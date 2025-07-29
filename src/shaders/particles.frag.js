@@ -38,8 +38,8 @@ void main() {
     // Boost alpha for better visibility
     alpha = clamp(alpha * 1.2, 0.0, 1.0);
 
-    // Enhanced blue-white color scheme with better contrast
-    vec3 color = mix(vec3(0.3, 0.6, 1.0), vec3(1.0, 1.0, 1.0), pattern * 0.9);
+    // Realistic starlight color scheme based on actual star temperatures
+    vec3 color = mix(vec3(0.8, 0.9, 1.0), vec3(1.0, 1.0, 1.0), pattern * 0.7);
 
     // Output color with calculated alpha
     gl_FragColor = vec4(color, alpha);

@@ -62,14 +62,8 @@ class HeroParticleApp {
 
         const context = canvas.getContext('2d')
 
-        // Create vertical gradient - very deep ocean blue, almost black
-        const gradient = context.createLinearGradient(0, 0, 0, canvas.height)
-        gradient.addColorStop(0, '#000205')    // Almost black with tiny blue hint at top
-        gradient.addColorStop(0.6, '#000408')  // Very deep navy blue in middle
-        gradient.addColorStop(1, '#000103')    // Nearly black at bottom
-
-        // Fill the canvas with gradient
-        context.fillStyle = gradient
+        // Create pure black background
+        context.fillStyle = '#000000'
         context.fillRect(0, 0, canvas.width, canvas.height)
 
         // Create texture from canvas
