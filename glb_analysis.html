@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLB Animation Analysis</title>
+    <style>
+        body {
+            font-family: 'Monaco', 'Menlo', monospace;
+            background: #1a1a1a;
+            color: #00ff41;
+            padding: 20px;
+            margin: 0;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #00ff41;
+            padding-bottom: 20px;
+        }
+        .file-analysis {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            margin: 20px 0;
+            padding: 20px;
+        }
+        .file-title {
+            color: #58a6ff;
+            font-size: 1.2em;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+        .section {
+            margin: 15px 0;
+        }
+        .section-title {
+            color: #f85149;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        .success { color: #3fb950; }
+        .warning { color: #d29922; }
+        .error { color: #f85149; }
+        .info { color: #58a6ff; }
+        .indent { margin-left: 20px; }
+        .indent2 { margin-left: 40px; }
+        .progress {
+            width: 100%;
+            height: 20px;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #00ff41, #58a6ff);
+            transition: width 0.3s ease;
+        }
+        .summary {
+            background: #0d1117;
+            border: 2px solid #58a6ff;
+            border-radius: 8px;
+            padding: 25px;
+            margin-top: 30px;
+        }
+        .summary-title {
+            color: #58a6ff;
+            font-size: 1.4em;
+            font-weight: bold;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .recommendation {
+            background: #0d2818;
+            border-left: 4px solid #3fb950;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #d29922;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔍 GLB Animation Analysis Tool</h1>
+            <p>Analyzing animation data in GLB files for ring trajectory replacement</p>
+        </div>
+        
+        <div id="loading" class="loading">
+            <h2>🚀 Initializing Analysis...</h2>
+            <div class="progress">
+                <div class="progress-bar" id="progressBar"></div>
+            </div>
+            <p id="loadingStatus">Loading Three.js and dependencies...</p>
+        </div>
+        
+        <div id="results" style="display: none;"></div>
+        
+        <div id="summary" style="display: none;" class="summary">
+            <div class="summary-title">📊 COMPREHENSIVE ANALYSIS SUMMARY</div>
+            <div id="summaryContent"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'https://unpkg.com/three@0.158.0/build/three.module.js';
+        import { GLTFLoader } from 'https://unpkg.com/three@0.158.0/examples/jsm/loaders/GLTFLoader.js';
+        import { DRACOLoader } from 'https://unpkg.com/three@0.158.0/examples/jsm/loaders/DRACOLoader.js';
+
+        const glbFiles = [
+            { path: 'LOST_cut2_v31-transformed.glb', name: 'Complete Scene' },
+            { path: 'Scenes_B_00100-transformed.glb', name: 'Ring 1' },
+            { path: 'Scenes_B_00100.001-transformed.glb', name: 'Ring 2' },
+            { path: 'Scenes_B_0023-transformed.glb', name: 'Ring 3' }
+        ];
+
+        class GLBAnimationAnalyzer {
+            constructor() {
+                this.loader = new GLTFLoader();
+                this.dracoLoader = new DRACOLoader();
+                this.dracoLoader.setDecoderPath('draco/');
+                this.loader.setDRACOLoader(this.dracoLoader);
+                
+                this.results = [];
+                this.totalFiles = glbFiles.length;
+                this.processedFiles = 0;
+            }
+
+            updateProgress(message) {
+                const progress = (this.processedFiles / this.totalFiles) * 100;
+                document.getElementById('progressBar').style.width = progress + '%';
+                document.getElementById('loadingStatus').textContent = message;
+            }
+
+            async analyzeFile(fileInfo) {
+                this.updateProgress(`Analyzing ${fileInfo.name}...`);
+                
+                try {
+                    const gltf = await this.loadGLB(fileInfo.path);
+                    const analysis = this.extractAnimationData(gltf, fileInfo);
+                    this.results.push(analysis);
+                    this.displayFileAnalysis(analysis);
+                    this.processedFiles++;
+                    return analysis;
+                } catch (error) {
+                    console.error(`Error analyzing ${fileInfo.path}:`, error);
+                    const errorAnalysis = {
+                        fileName: fileInfo.name,
+                        filePath: fileInfo.path,
+                        error: error.message,
+                        hasAnimations: false,
+                        success: false
+                    };
+                    this.results.push(errorAnalysis);
+                    this.displayFileAnalysis(errorAnalysis);
+                    this.processedFiles++;
+                    return errorAnalysis;
+                }
+            }
+
+            loadGLB(filePath) {
+                return new Promise((resolve, reject) => {
+                    this.loader.load(
+                        filePath,
+                        (gltf) => resolve(gltf),
+                        (progress) => {
+                            if (progress.total > 0) {
+                                const percent = (progress.loaded / progress.total * 100).toFixed(1);
+                                this.updateProgress(`Loading ${filePath}: ${percent}%`);
+                            }
+                        },
+                        (error) => reject(error)
+                    );
+                });
+            }
+
+            extractAnimationData(gltf, fileInfo) {
+                const analysis = {
+                    fileName: fileInfo.name,
+                    filePath: fileInfo.path,
+                    success: true,
+                    hasAnimations: gltf.animations && gltf.animations.length > 0,
+                    animationCount: gltf.animations ? gltf.animations.length : 0,
+                    animations: [],
+                    scene: {
+                        objectCount: 0,
+                        meshCount: 0,
+                        cameraCount: 0,
+                        lightCount: 0,
+                        skinnedMeshCount: 0
+                    },
+                    cameras: [],
+                    meshes: [],
+                    boundingBox: new THREE.Box3()
+                };
+
+                // Calculate scene bounding box and analyze structure
+                gltf.scene.traverse((child) => {
+                    analysis.scene.objectCount++;
+                    
+                    if (child.isMesh) {
+                        analysis.scene.meshCount++;
+                        
+                        if (child.isSkinnedMesh) {
+                            analysis.scene.skinnedMeshCount++;
+                        }
+                        
+                        // Expand bounding box
+                        if (child.geometry && child.geometry.attributes.position) {
+                            child.geometry.computeBoundingBox();
+                            const meshBox = child.geometry.boundingBox.clone();
+                            meshBox.applyMatrix4(child.matrixWorld);
+                            analysis.boundingBox.union(meshBox);
+                        }
+                        
+                        analysis.meshes.push({
+                            name: child.name || 'unnamed',
+                            geometry: child.geometry.constructor.name,
+                            vertexCount: child.geometry.attributes.position ? child.geometry.attributes.position.count : 0,
+                            hasSkinnedMesh: child.isSkinnedMesh,
+                            materialName: child.material ? (child.material.name || 'unnamed') : 'none',
+                            position: child.position.toArray(),
+                            rotation: child.rotation.toArray(),
+                            scale: child.scale.toArray()
+                        });
+                    }
+                    
+                    if (child.isCamera) {
+                        analysis.scene.cameraCount++;
+                        analysis.cameras.push({
+                            name: child.name || 'unnamed',
+                            type: child.constructor.name,
+                            position: child.position.toArray(),
+                            rotation: child.rotation.toArray(),
+                            fov: child.fov || null,
+                            near: child.near || null,
+                            far: child.far || null
+                        });
+                    }
+                    
+                    if (child.isLight) {
+                        analysis.scene.lightCount++;
+                    }
+                });
+
+                // Analyze animations in detail
+                if (gltf.animations && gltf.animations.length > 0) {
+                    gltf.animations.forEach((animation, index) => {
+                        const animData = {
+                            name: animation.name || `Animation_${index}`,
+                            duration: animation.duration,
+                            trackCount: animation.tracks.length,
+                            tracks: [],
+                            tracksByProperty: {
+                                position: [],
+                                rotation: [],
+                                scale: [],
+                                morphTargetInfluences: [],
+                                other: []
+                            }
+                        };
+
+                        animation.tracks.forEach((track) => {
+                            const trackInfo = {
+                                name: track.name,
+                                type: track.constructor.name,
+                                targetObject: track.name.split('.')[0],
+                                times: {
+                                    count: track.times.length,
+                                    start: track.times[0],
+                                    end: track.times[track.times.length - 1],
+                                    duration: track.times[track.times.length - 1] - track.times[0],
+                                    fps: track.times.length > 1 ? (track.times.length - 1) / (track.times[track.times.length - 1] - track.times[0]) : 0
+                                },
+                                values: {
+                                    count: track.values.length,
+                                    itemSize: track.getValueSize(),
+                                    totalKeyframes: track.values.length / track.getValueSize()
+                                },
+                                interpolation: this.getInterpolationName(track.getInterpolation())
+                            };
+
+                            // Determine animation property type
+                            if (track.name.includes('.position')) {
+                                trackInfo.property = 'position';
+                                animData.tracksByProperty.position.push(trackInfo);
+                            } else if (track.name.includes('.rotation') || track.name.includes('.quaternion')) {
+                                trackInfo.property = 'rotation';
+                                animData.tracksByProperty.rotation.push(trackInfo);
+                            } else if (track.name.includes('.scale')) {
+                                trackInfo.property = 'scale';
+                                animData.tracksByProperty.scale.push(trackInfo);
+                            } else if (track.name.includes('morphTargetInfluences')) {
+                                trackInfo.property = 'morphTargetInfluences';
+                                animData.tracksByProperty.morphTargetInfluences.push(trackInfo);
+                            } else {
+                                trackInfo.property = 'other';
+                                animData.tracksByProperty.other.push(trackInfo);
+                            }
+
+                            // Sample keyframe values for analysis
+                            if (track.values.length > 0) {
+                                const sampleCount = Math.min(3, trackInfo.values.totalKeyframes);
+                                trackInfo.sampleValues = [];
+                                
+                                for (let i = 0; i < sampleCount; i++) {
+                                    const index = i === 0 ? 0 : 
+                                                 i === sampleCount - 1 ? trackInfo.values.totalKeyframes - 1 :
+                                                 Math.floor((trackInfo.values.totalKeyframes - 1) / 2);
+                                    
+                                    const startIdx = index * trackInfo.values.itemSize;
+                                    const values = [];
+                                    
+                                    for (let j = 0; j < trackInfo.values.itemSize; j++) {
+                                        values.push(track.values[startIdx + j]);
+                                    }
+                                    
+                                    trackInfo.sampleValues.push({
+                                        time: track.times[index],
+                                        values: values,
+                                        index: index
+                                    });
+                                }
+                            }
+
+                            animData.tracks.push(trackInfo);
+                        });
+
+                        analysis.animations.push(animData);
+                    });
+                }
+
+                return analysis;
+            }
+
+            getInterpolationName(interpolationType) {
+                const types = {
+                    2300: 'InterpolateDiscrete',
+                    2301: 'InterpolateLinear', 
+                    2302: 'InterpolateSmooth'
+                };
+                return types[interpolationType] || 'Unknown';
+            }
+
+            displayFileAnalysis(analysis) {
+                const resultsDiv = document.getElementById('results');
+                resultsDiv.style.display = 'block';
+                
+                const fileDiv = document.createElement('div');
+                fileDiv.className = 'file-analysis';
+                
+                let html = `<div class="file-title">📁 ${analysis.fileName} (${analysis.filePath})</div>`;
+                
+                if (!analysis.success) {
+                    html += `
+                        <div class="section">
+                            <div class="section-title error">❌ Loading Error</div>
+                            <div class="error">${analysis.error}</div>
+                        </div>
+                    `;
+                } else {
+                    // Scene structure
+                    html += `
+                        <div class="section">
+                            <div class="section-title">🏗️ Scene Structure</div>
+                            <div class="indent">Objects: <span class="info">${analysis.scene.objectCount}</span></div>
+                            <div class="indent">Meshes: <span class="info">${analysis.scene.meshCount}</span></div>
+                            <div class="indent">Skinned Meshes: <span class="info">${analysis.scene.skinnedMeshCount}</span></div>
+                            <div class="indent">Cameras: <span class="info">${analysis.scene.cameraCount}</span></div>
+                            <div class="indent">Lights: <span class="info">${analysis.scene.lightCount}</span></div>
+                        </div>
+                    `;
+
+                    // Bounding box info
+                    const bbox = analysis.boundingBox;
+                    const size = bbox.getSize(new THREE.Vector3());
+                    const center = bbox.getCenter(new THREE.Vector3());
+                    
+                    html += `
+                        <div class="section">
+                            <div class="section-title">📐 Bounding Box</div>
+                            <div class="indent">Center: [${center.x.toFixed(2)}, ${center.y.toFixed(2)}, ${center.z.toFixed(2)}]</div>
+                            <div class="indent">Size: [${size.x.toFixed(2)}, ${size.y.toFixed(2)}, ${size.z.toFixed(2)}]</div>
+                        </div>
+                    `;
+
+                    // Animation analysis
+                    html += `
+                        <div class="section">
+                            <div class="section-title">🎬 Animation Analysis</div>
+                            <div class="indent">Has Animations: <span class="${analysis.hasAnimations ? 'success' : 'error'}">${analysis.hasAnimations ? 'Yes' : 'No'}</span></div>
+                            <div class="indent">Animation Count: <span class="info">${analysis.animationCount}</span></div>
+                        </div>
+                    `;
+
+                    if (analysis.hasAnimations) {
+                        analysis.animations.forEach((anim, i) => {
+                            html += `
+                                <div class="section">
+                                    <div class="section-title">🎭 Animation ${i + 1}: "${anim.name}"</div>
+                                    <div class="indent">Duration: <span class="info">${anim.duration.toFixed(3)}s</span></div>
+                                    <div class="indent">Total Tracks: <span class="info">${anim.trackCount}</span></div>
+                            `;
+                            
+                            // Track breakdown by type
+                            Object.entries(anim.tracksByProperty).forEach(([property, tracks]) => {
+                                if (tracks.length > 0) {
+                                    html += `
+                                        <div class="indent">
+                                            <div class="section-title">${property.toUpperCase()} Tracks: ${tracks.length}</div>
+                                    `;
+                                    
+                                    tracks.forEach(track => {
+                                        html += `
+                                            <div class="indent2">
+                                                <div><strong>${track.targetObject}</strong></div>
+                                                <div>Keyframes: ${track.values.totalKeyframes} | FPS: ${track.times.fps.toFixed(1)} | ${track.interpolation}</div>
+                                        `;
+                                        
+                                        if (track.sampleValues && track.sampleValues.length > 0) {
+                                            html += `<div>Sample values:</div>`;
+                                            track.sampleValues.forEach(sample => {
+                                                const values = sample.values.map(v => v.toFixed(3)).join(', ');
+                                                html += `<div class="indent">t=${sample.time.toFixed(2)}s: [${values}]</div>`;
+                                            });
+                                        }
+                                        
+                                        html += `</div>`;
+                                    });
+                                    
+                                    html += `</div>`;
+                                }
+                            });
+                            
+                            html += `</div>`;
+                        });
+                    }
+
+                    // Cameras
+                    if (analysis.cameras.length > 0) {
+                        html += `
+                            <div class="section">
+                                <div class="section-title">📷 Cameras</div>
+                        `;
+                        
+                        analysis.cameras.forEach((camera, i) => {
+                            html += `
+                                <div class="indent">
+                                    <div><strong>${camera.name}</strong> (${camera.type})</div>
+                                    <div>Position: [${camera.position.map(v => v.toFixed(2)).join(', ')}]</div>
+                                    ${camera.fov ? `<div>FOV: ${camera.fov}°</div>` : ''}
+                                </div>
+                            `;
+                        });
+                        
+                        html += `</div>`;
+                    }
+                }
+                
+                fileDiv.innerHTML = html;
+                resultsDiv.appendChild(fileDiv);
+            }
+
+            generateSummaryReport() {
+                const summaryDiv = document.getElementById('summary');
+                const contentDiv = document.getElementById('summaryContent');
+                summaryDiv.style.display = 'block';
+                
+                const successfulResults = this.results.filter(r => r.success);
+                const failedResults = this.results.filter(r => !r.success);
+                
+                const summary = {
+                    totalFiles: this.results.length,
+                    successfulFiles: successfulResults.length,
+                    failedFiles: failedResults.length,
+                    filesWithAnimations: 0,
+                    totalAnimations: 0,
+                    hasPositionTracks: 0,
+                    hasRotationTracks: 0,
+                    hasScaleTracks: 0,
+                    hasCameraAnimations: 0,
+                    totalCameras: 0,
+                    totalMeshes: 0,
+                    totalSkinnedMeshes: 0
+                };
+                
+                successfulResults.forEach(result => {
+                    if (result.hasAnimations) {
+                        summary.filesWithAnimations++;
+                        summary.totalAnimations += result.animationCount;
+                        
+                        result.animations.forEach(anim => {
+                            if (anim.tracksByProperty.position.length > 0) summary.hasPositionTracks++;
+                            if (anim.tracksByProperty.rotation.length > 0) summary.hasRotationTracks++;
+                            if (anim.tracksByProperty.scale.length > 0) summary.hasScaleTracks++;
+                        });
+                    }
+                    
+                    summary.totalCameras += result.scene.cameraCount;
+                    summary.totalMeshes += result.scene.meshCount;
+                    summary.totalSkinnedMeshes += result.scene.skinnedMeshCount;
+                    
+                    if (result.scene.cameraCount > 0) {
+                        summary.hasCameraAnimations++;
+                    }
+                });
+                
+                let html = `
+                    <div class="section">
+                        <div class="section-title">📊 Processing Summary</div>
+                        <div class="indent">Files analyzed: <span class="info">${summary.totalFiles}</span></div>
+                        <div class="indent">Successful: <span class="success">${summary.successfulFiles}</span></div>
+                        <div class="indent">Failed: <span class="error">${summary.failedFiles}</span></div>
+                    </div>
+                    
+                    <div class="section">
+                        <div class="section-title">🎬 Animation Summary</div>
+                        <div class="indent">Files with animations: <span class="info">${summary.filesWithAnimations}</span></div>
+                        <div class="indent">Total animations found: <span class="info">${summary.totalAnimations}</span></div>
+                        <div class="indent">Animations with position tracks: <span class="info">${summary.hasPositionTracks}</span></div>
+                        <div class="indent">Animations with rotation tracks: <span class="info">${summary.hasRotationTracks}</span></div>
+                        <div class="indent">Animations with scale tracks: <span class="info">${summary.hasScaleTracks}</span></div>
+                    </div>
+                    
+                    <div class="section">
+                        <div class="section-title">🏗️ Scene Summary</div>
+                        <div class="indent">Total meshes: <span class="info">${summary.totalMeshes}</span></div>
+                        <div class="indent">Skinned meshes: <span class="info">${summary.totalSkinnedMeshes}</span></div>
+                        <div class="indent">Cameras: <span class="info">${summary.totalCameras}</span></div>
+                    </div>
+                `;
+                
+                // Feasibility analysis
+                const feasible = summary.filesWithAnimations > 0 && 
+                               (summary.hasPositionTracks > 0 || summary.hasRotationTracks > 0);
+                
+                html += `
+                    <div class="recommendation">
+                        <div class="section-title">🎯 FEASIBILITY FOR RING TRAJECTORY REPLACEMENT</div>
+                `;
+                
+                if (feasible) {
+                    html += `
+                        <div class="success">✅ FEASIBLE - Animation data supports trajectory replacement</div>
+                        <div class="indent">✅ Can extract keyframe data for position, rotation, and timing</div>
+                        <div class="indent">✅ Can implement smooth interpolation between keyframes</div>
+                        <div class="indent">✅ Ring motion can be driven by extracted animation curves</div>
+                    `;
+                } else {
+                    html += `
+                        <div class="error">❌ NOT FEASIBLE - Insufficient animation data</div>
+                        <div class="indent">❌ Need to export animation tracks from original 3D software</div>
+                    `;
+                }
+                
+                html += `</div>`;
+                
+                // Technical recommendations
+                if (summary.filesWithAnimations > 0) {
+                    html += `
+                        <div class="recommendation">
+                            <div class="section-title">💡 TECHNICAL RECOMMENDATIONS</div>
+                            <div class="indent">• Extract animation curves from GLB files using Three.js AnimationClip API</div>
+                            <div class="indent">• Use AnimationMixer for precise timing control</div>
+                            <div class="indent">• Implement custom interpolation for smooth trajectory following</div>
+                            <div class="indent">• Consider using Bezier curves for enhanced motion smoothness</div>
+                            <div class="indent">• Test performance with multiple simultaneous animations</div>
+                        </div>
+                    `;
+                }
+                
+                contentDiv.innerHTML = html;
+            }
+
+            async analyzeAll() {
+                this.updateProgress('Starting analysis...');
+                
+                for (const fileInfo of glbFiles) {
+                    await this.analyzeFile(fileInfo);
+                }
+                
+                document.getElementById('loading').style.display = 'none';
+                this.generateSummaryReport();
+                
+                console.log('✨ Analysis complete!', this.results);
+            }
+        }
+
+        // Start the analysis
+        const analyzer = new GLBAnimationAnalyzer();
+        analyzer.analyzeAll().catch(error => {
+            console.error('Analysis failed:', error);
+            document.getElementById('loadingStatus').textContent = 'Analysis failed: ' + error.message;
+            document.getElementById('loadingStatus').className = 'error';
+        });
+    </script>
+</body>
+</html>

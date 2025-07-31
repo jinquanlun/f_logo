@@ -22,6 +22,56 @@ export class HeroParticleSystem {
         this.animationActions = []
         this.customAnimationTime = 0
         this.smallestRingObjects = [] // Store references to smallest ring objects
+        
+        // Enhanced animation control system
+        this.animationSpeed = 1.0
+        
+        // Advanced particle behavior system
+        this.mousePosition = new THREE.Vector3()
+        this.mouseStrength = 0.0
+        this.environmentalPhase = 0.0
+        this.magneticField = {
+            enabled: true,
+            strength: 2.0,
+            range: 8.0,
+            falloff: 2.0
+        }
+        this.morphingState = {
+            enabled: true,
+            intensity: 0.5,
+            frequency: 0.3,
+            phase: 0.0
+        }
+        this.animationBlending = {
+            enabled: true,
+            primaryWeight: 1.0,
+            secondaryWeight: 0.0,
+            blendSpeed: 2.0,
+            targetPrimary: 0,
+            targetSecondary: 1
+        }
+        this.animationModes = {
+            SINGLE: 'single',
+            BLEND: 'blend',
+            SEQUENCE: 'sequence',
+            DYNAMIC: 'dynamic'
+        }
+        this.currentMode = this.animationModes.DYNAMIC
+        
+        // Performance optimization system
+        this.performanceMonitor = {
+            frameCount: 0,
+            lastFPSCheck: 0,
+            averageFPS: 60,
+            targetFPS: 60,
+            adaptiveQuality: true,
+            currentQuality: 1.0, // 0.5 = half quality, 1.0 = full quality
+            qualityLevels: {
+                LOW: { particleSize: 4.0, opacity: 0.6, complexity: 0.5 },
+                MEDIUM: { particleSize: 5.5, opacity: 0.75, complexity: 0.75 },
+                HIGH: { particleSize: 6.5, opacity: 0.85, complexity: 1.0 }
+            }
+        }
 
         // Animation scene control - set to false to disable specific scenes
         this.enabledScenes = {
@@ -206,9 +256,17 @@ export class HeroParticleSystem {
                 fragmentShader: particleFragmentShader,
                 uniforms: {
                     uBasePositions: { value: processedData.basePositionTexture },
-                    uPointSize: { value: 5.5 }, // Larger particles for better visibility
-                    uOpacity: { value: 0.9 }, // Slightly higher opacity for clarity
-                    uTime: { value: 0.0 }
+                    uPointSize: { value: 6.5 }, // Slightly larger for enhanced effects
+                    uOpacity: { value: 0.85 }, // Balanced opacity for new effects
+                    uTime: { value: 0.0 },
+                    uMousePosition: { value: new THREE.Vector3() },
+                    uMouseStrength: { value: 0.0 },
+                    uMagneticStrength: { value: 2.0 },
+                    uMorphingIntensity: { value: 0.5 },
+                    uFogNear: { value: 5.0 },
+                    uFogFar: { value: 50.0 },
+                    uAtmosphericColor: { value: new THREE.Color(0x74b9ff) },
+                    uEnvironmentalShift: { value: 0.0 }
                 },
                 transparent: true,
                 blending: THREE.AdditiveBlending,
@@ -310,6 +368,9 @@ export class HeroParticleSystem {
     }
     
     update(deltaTime) {
+        // Performance monitoring and adaptive quality
+        this.updatePerformanceMonitoring(deltaTime)
+        
         // Ultra-smooth animation updates with enhanced time smoothing
         const smoothDeltaTime = Math.min(deltaTime, 1/30) // Cap at 30fps minimum for ultra-smooth animation
 
@@ -321,8 +382,11 @@ export class HeroParticleSystem {
         // Ensure deltaTime is never zero or negative to prevent animation jumps
         const safeDelta = Math.max(ultraSmoothDelta, 0.001)
 
-        // Custom smooth animation time management
-        this.customAnimationTime += safeDelta * 0.4 // Slower animation speed for smoother motion
+        // Enhanced animation time management with dynamic speed control
+        const baseSpeed = 0.4
+        const dynamicSpeedVariation = Math.sin(this.customAnimationTime * 0.3) * 0.15 + 1.0
+        const finalSpeed = baseSpeed * this.animationSpeed * dynamicSpeedVariation
+        this.customAnimationTime += safeDelta * finalSpeed
 
         if (this.animationMixer && this.animationActions.length > 0) {
             // Save current state of smallest ring objects before animation update
@@ -334,12 +398,30 @@ export class HeroParticleSystem {
                 scale: obj.scale.clone()
             }))
 
-            // Manually control animation time for perfectly smooth looping
-            this.animationActions.forEach(({ action, duration }) => {
+            // Enhanced animation control with blending and dynamic modes
+            this.updateAnimationBlending(ultraSmoothDelta)
+            
+            this.animationActions.forEach(({ action, duration }, index) => {
                 // Calculate smooth looping time with seamless transitions
                 const loopTime = this.customAnimationTime % duration
-
-                // Set the action time directly - this bypasses Three.js loop logic
+                
+                // Apply blending weights based on current mode
+                let weight = 1.0
+                if (this.currentMode === this.animationModes.BLEND && this.animationActions.length > 1) {
+                    if (index === this.animationBlending.targetPrimary) {
+                        weight = this.animationBlending.primaryWeight
+                    } else if (index === this.animationBlending.targetSecondary) {
+                        weight = this.animationBlending.secondaryWeight
+                    } else {
+                        weight = 0.0
+                    }
+                } else if (this.currentMode === this.animationModes.DYNAMIC) {
+                    // Dynamic weight based on time and animation characteristics
+                    const timePhase = (this.customAnimationTime / duration) % 1.0
+                    weight = 0.5 + 0.5 * Math.sin(timePhase * Math.PI * 2.0 + index * Math.PI * 0.5)
+                }
+                
+                action.setEffectiveWeight(weight)
                 action.time = loopTime
             })
 
@@ -356,12 +438,185 @@ export class HeroParticleSystem {
             })
         }
 
-        // Update particle rotation time with ultra-smooth interpolation
-        if (this.particleMaterial && this.particleMaterial.uniforms.uTime) {
-            this.particleMaterial.uniforms.uTime.value += ultraSmoothDelta
+        // Update particle system uniforms
+        if (this.particleMaterial && this.particleMaterial.uniforms) {
+            if (this.particleMaterial.uniforms.uTime) {
+                this.particleMaterial.uniforms.uTime.value += ultraSmoothDelta
+            }
+            if (this.particleMaterial.uniforms.uMousePosition) {
+                this.particleMaterial.uniforms.uMousePosition.value.copy(this.mousePosition)
+            }
+            if (this.particleMaterial.uniforms.uMouseStrength) {
+                this.particleMaterial.uniforms.uMouseStrength.value = this.mouseStrength
+            }
+            if (this.particleMaterial.uniforms.uMorphingIntensity) {
+                // Update morphing phase
+                this.morphingState.phase += ultraSmoothDelta * this.morphingState.frequency
+                const morphingValue = this.morphingState.intensity * (0.5 + 0.5 * Math.sin(this.morphingState.phase))
+                this.particleMaterial.uniforms.uMorphingIntensity.value = morphingValue
+            }
+            
+            // Update environmental effects
+            if (this.particleMaterial.uniforms.uEnvironmentalShift) {
+                this.environmentalPhase += ultraSmoothDelta * 0.2
+                const envShift = 0.3 + 0.3 * Math.sin(this.environmentalPhase) + 0.2 * Math.cos(this.environmentalPhase * 0.7)
+                this.particleMaterial.uniforms.uEnvironmentalShift.value = envShift
+            }
+            
+            // Dynamic atmospheric color
+            if (this.particleMaterial.uniforms.uAtmosphericColor) {
+                const r = 0.45 + 0.1 * Math.sin(this.environmentalPhase * 0.8)
+                const g = 0.72 + 0.08 * Math.cos(this.environmentalPhase * 1.2)
+                const b = 1.0 - 0.05 * Math.sin(this.environmentalPhase * 0.5)
+                this.particleMaterial.uniforms.uAtmosphericColor.value.setRGB(r, g, b)
+            }
         }
-
-
+    }
+    
+    updateAnimationBlending(deltaTime) {
+        if (!this.animationBlending.enabled || this.animationActions.length < 2) return
+        
+        // Smooth blending transitions
+        const blendSpeed = this.animationBlending.blendSpeed * deltaTime
+        
+        // Auto-cycle through animations in blend mode
+        if (this.currentMode === this.animationModes.BLEND) {
+            const cycleDuration = 8.0 // seconds per blend cycle
+            const cyclePhase = (this.customAnimationTime / cycleDuration) % 1.0
+            
+            if (cyclePhase < 0.4) {
+                // Blend from primary to secondary
+                this.animationBlending.primaryWeight = Math.max(0.0, this.animationBlending.primaryWeight - blendSpeed)
+                this.animationBlending.secondaryWeight = Math.min(1.0, this.animationBlending.secondaryWeight + blendSpeed)
+            } else if (cyclePhase > 0.6) {
+                // Blend back from secondary to primary
+                this.animationBlending.primaryWeight = Math.min(1.0, this.animationBlending.primaryWeight + blendSpeed)
+                this.animationBlending.secondaryWeight = Math.max(0.0, this.animationBlending.secondaryWeight - blendSpeed)
+            }
+            
+            // Switch targets when blend is complete
+            if (cyclePhase > 0.9 && this.animationBlending.primaryWeight > 0.9) {
+                this.animationBlending.targetPrimary = (this.animationBlending.targetPrimary + 1) % this.animationActions.length
+                this.animationBlending.targetSecondary = (this.animationBlending.targetSecondary + 1) % this.animationActions.length
+            }
+        }
+    }
+    
+    // Public methods for controlling animation
+    setAnimationSpeed(speed) {
+        this.animationSpeed = Math.max(0.1, Math.min(3.0, speed))
+    }
+    
+    setAnimationMode(mode) {
+        if (Object.values(this.animationModes).includes(mode)) {
+            this.currentMode = mode
+        }
+    }
+    
+    blendToAnimation(primaryIndex, secondaryIndex = null) {
+        if (primaryIndex >= 0 && primaryIndex < this.animationActions.length) {
+            this.animationBlending.targetPrimary = primaryIndex
+            this.animationBlending.targetSecondary = secondaryIndex !== null ? 
+                secondaryIndex : (primaryIndex + 1) % this.animationActions.length
+            this.currentMode = this.animationModes.BLEND
+        }
+    }
+    
+    // Mouse interaction methods
+    updateMouseInteraction(mousePosition, strength) {
+        this.mousePosition.copy(mousePosition)
+        this.mouseStrength = strength
+    }
+    
+    // Advanced particle behavior controls
+    setMagneticField(enabled, strength = 2.0, range = 8.0) {
+        this.magneticField.enabled = enabled
+        this.magneticField.strength = strength
+        this.magneticField.range = range
+    }
+    
+    setMorphingEffect(enabled, intensity = 0.5, frequency = 0.3) {
+        this.morphingState.enabled = enabled
+        this.morphingState.intensity = intensity
+        this.morphingState.frequency = frequency
+    }
+    
+    // Performance monitoring and adaptive quality system
+    updatePerformanceMonitoring(deltaTime) {
+        if (!this.performanceMonitor.adaptiveQuality) return
+        
+        this.performanceMonitor.frameCount++
+        const currentTime = performance.now()
+        
+        // Check FPS every second
+        if (currentTime - this.performanceMonitor.lastFPSCheck > 1000) {
+            this.performanceMonitor.averageFPS = this.performanceMonitor.frameCount
+            this.performanceMonitor.frameCount = 0
+            this.performanceMonitor.lastFPSCheck = currentTime
+            
+            // Adjust quality based on performance
+            this.adjustQualityBasedOnFPS()
+        }
+    }
+    
+    adjustQualityBasedOnFPS() {
+        const fps = this.performanceMonitor.averageFPS
+        const target = this.performanceMonitor.targetFPS
+        let newQuality = this.performanceMonitor.currentQuality
+        
+        if (fps < target * 0.8) { // Below 80% of target FPS
+            newQuality = Math.max(0.3, newQuality - 0.1) // Reduce quality
+        } else if (fps > target * 0.95) { // Above 95% of target FPS
+            newQuality = Math.min(1.0, newQuality + 0.05) // Increase quality
+        }
+        
+        if (newQuality !== this.performanceMonitor.currentQuality) {
+            this.performanceMonitor.currentQuality = newQuality
+            this.applyQualitySettings(newQuality)
+        }
+    }
+    
+    applyQualitySettings(quality) {
+        if (!this.particleMaterial || !this.particleMaterial.uniforms) return
+        
+        // Determine quality level
+        let qualityLevel
+        if (quality < 0.6) {
+            qualityLevel = this.performanceMonitor.qualityLevels.LOW
+        } else if (quality < 0.9) {
+            qualityLevel = this.performanceMonitor.qualityLevels.MEDIUM
+        } else {
+            qualityLevel = this.performanceMonitor.qualityLevels.HIGH
+        }
+        
+        // Apply quality settings to uniforms
+        if (this.particleMaterial.uniforms.uPointSize) {
+            this.particleMaterial.uniforms.uPointSize.value = qualityLevel.particleSize
+        }
+        if (this.particleMaterial.uniforms.uOpacity) {
+            this.particleMaterial.uniforms.uOpacity.value = qualityLevel.opacity
+        }
+        
+        // Adjust morphing and magnetic effects based on quality
+        this.morphingState.intensity = this.morphingState.intensity * qualityLevel.complexity
+        this.magneticField.strength = this.magneticField.strength * qualityLevel.complexity
+    }
+    
+    // Public methods for performance control
+    setAdaptiveQuality(enabled) {
+        this.performanceMonitor.adaptiveQuality = enabled
+    }
+    
+    setTargetFPS(fps) {
+        this.performanceMonitor.targetFPS = Math.max(30, Math.min(120, fps))
+    }
+    
+    getPerformanceStats() {
+        return {
+            fps: this.performanceMonitor.averageFPS,
+            quality: this.performanceMonitor.currentQuality,
+            adaptiveEnabled: this.performanceMonitor.adaptiveQuality
+        }
     }
     
     toggleVisibility() {
