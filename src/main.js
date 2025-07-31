@@ -31,6 +31,7 @@ import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
 import { HeroParticleSystem } from './HeroParticleSystem.js'
 import { AnimationTrackExtractor } from './AnimationTrackExtractor.js'
 import { RingAnimationMapper } from './RingAnimationMapper.js'
+import { CameraAnimationMapper } from './CameraAnimationMapper.js'
 
 /**
  * 主应用程序类 - 3D粒子系统的核心控制器
@@ -67,6 +68,7 @@ class HeroParticleApp {
         // 初始化多动画系统组件
         this.trackExtractor = new AnimationTrackExtractor()
         this.ringMapper = null // 将在模型加载后初始化
+        this.cameraMapper = null // 将在场景初始化后创建
 
         // 按顺序执行初始化流程
         this.init()              // 初始化Three.js基础组件
@@ -136,11 +138,8 @@ class HeroParticleApp {
         
         // === 大气效果 ===
         // 启用线性雾效，提供深度感和大气透视效果
-        // 参数：雾颜色(纯黑)、近平面(5)、远平面(50)
-        this.scene.fog = new THREE.Fog(0x000000, 5, 50)
-        
-        // 设置雾浓度，控制大气效果的强度
-        this.scene.fog.density = 0.01
+        // 适度扩展远平面以适应相机轨迹
+        this.scene.fog = new THREE.Fog(0x000000, 10, 100)
         
 
         
@@ -148,13 +147,13 @@ class HeroParticleApp {
         // 采用多层次光照设计，模拟真实的天空光照环境
         
         // 主环境光：提供基础的全局照明，营造深空氛围
-        // 颜色选择：深蓝色(0x1a1a2e)，低亮度(0.4)，符合太空主题
-        const ambientLight = new THREE.AmbientLight(0x1a1a2e, 0.4)
+        // 适度增强亮度
+        const ambientLight = new THREE.AmbientLight(0x1a1a2e, 0.6)
         this.scene.add(ambientLight)
         
         // 主光源：模拟太阳光，提供主要的方向性照明
-        // 冷色调(0x4a69bd)营造科技感，中等亮度(0.6)保持细节
-        const directionalLight = new THREE.DirectionalLight(0x4a69bd, 0.6)
+        // 适度增强亮度
+        const directionalLight = new THREE.DirectionalLight(0x4a69bd, 0.8)
         
         // 设置主光源位置：右上方，模拟自然光照角度
         directionalLight.position.set(8, 10, 6)
@@ -164,20 +163,20 @@ class HeroParticleApp {
         this.scene.add(directionalLight)
         
         // 辅助光源1：紫色口音光，为场景添加生动性
-        // 位置在左侧，与主光源形成对比，避免平均照明
-        const fillLight1 = new THREE.DirectionalLight(0x6c5ce7, 0.3) // 紫色口音
+        // 增强亮度以改善整体照明
+        const fillLight1 = new THREE.DirectionalLight(0x8c7ce7, 0.6) // 增强紫色口音
         fillLight1.position.set(-5, 3, -8)
         this.scene.add(fillLight1)
         
         // 辅助光源2：微妙的绿色光线，模拟环境反射光
-        // 低亮度(0.2)提供细微的环境色彩变化
-        const fillLight2 = new THREE.DirectionalLight(0x2ecc71, 0.2) // 微妙绿色
+        // 增强亮度以提供更好的环境光照
+        const fillLight2 = new THREE.DirectionalLight(0x4eee91, 0.4) // 增强绿色
         fillLight2.position.set(2, -4, 10)
         this.scene.add(fillLight2)
         
         // 粒子发光效果：为粒子系统提供局部光照
-        // 使用点光源模拟粒子的发光效果，增强视觉吸引力
-        const particleGlow = new THREE.PointLight(0x74b9ff, 0.5, 30) // 亮蓝色发光
+        // 大幅增强点光源范围以覆盖相机轨迹的远距离
+        const particleGlow = new THREE.PointLight(0x94d9ff, 2.0, 200) // 扩大照明范围
         particleGlow.position.set(0, 0, 0) // 中心位置
         this.scene.add(particleGlow)
         
@@ -204,6 +203,10 @@ class HeroParticleApp {
         // === 电影级相机系统 ===
         // 初始化高级相机运动系统，实现电影级的视角切换效果
         this.setupCinematicCamera()
+
+        // === 相机动画映射器初始化 ===
+        // 创建相机动画映射器，用于应用自定义相机轨迹
+        this.cameraMapper = new CameraAnimationMapper(this.camera, this.scene)
     }
 
     /**
@@ -474,6 +477,9 @@ class HeroParticleApp {
             // Load custom animation tracks
             await this.loadCustomAnimationTracks()
 
+            // Load custom camera tracks
+            await this.loadCustomCameraTracks()
+
         } catch (error) {
             console.error('Error loading model:', error)
         }
@@ -522,6 +528,66 @@ class HeroParticleApp {
     }
 
     /**
+     * 加载自定义相机轨迹
+     * 从相机GLB文件中提取相机动画数据并应用
+     */
+    async loadCustomCameraTracks() {
+        try {
+            console.log('🎥 开始加载自定义相机轨迹...')
+            
+            if (!this.cameraMapper) {
+                console.warn('⚠️ 相机映射器未初始化')
+                return
+            }
+
+            // 提取相机动画轨迹
+            const cameraData = await this.cameraMapper.extractCameraTracks('/cam_cut2_v3cam.glb')
+            
+            if (cameraData && cameraData.hasAnimations) {
+                console.log('✅ 自定义相机轨迹加载成功!')
+                console.log('📊 相机轨迹摘要:', {
+                    animations: cameraData.animations.length,
+                    hasStaticCamera: !!cameraData.staticCamera,
+                    filePath: cameraData.filePath
+                })
+            } else {
+                console.warn('⚠️ 没有找到有效的相机动画轨迹')
+            }
+            
+        } catch (error) {
+            console.error('❌ 加载自定义相机轨迹失败:', error)
+        }
+    }
+
+    /**
+     * 切换相机模式
+     * @param {boolean} useCustomCamera 是否使用自定义相机轨迹
+     */
+    toggleCameraMode(useCustomCamera = null) {
+        if (!this.cameraMapper) {
+            console.warn('⚠️ 相机映射器未初始化')
+            return
+        }
+
+        const status = this.cameraMapper.getStatus()
+        
+        if (useCustomCamera === null) {
+            // 自动切换
+            useCustomCamera = !status.isUsingCustomCamera
+        }
+
+        if (useCustomCamera && status.hasCustomTracks) {
+            // 使用自定义相机轨迹
+            this.cameraMapper.applyCustomCameraTracks()
+            console.log('🎥 切换到自定义相机轨迹')
+        } else {
+            // 恢复原始相机状态
+            this.cameraMapper.restoreOriginalCamera()
+            console.log('🔄 切换到电影级相机系统')
+        }
+    }
+
+    /**
      * 切换动画模式
      * @param {boolean} useCustomTracks 是否使用自定义轨迹
      */
@@ -544,6 +610,63 @@ class HeroParticleApp {
             // 恢复原始轨迹
             this.ringMapper.restoreOriginalAnimation()
             console.log('🔄 切换到原始动画轨迹')
+        }
+    }
+
+    /**
+     * 动态更新雾效设置
+     * 根据相机模式和距离调整雾效，确保圆环始终可见
+     */
+    updateDynamicFog() {
+        if (!this.cameraMapper || !this.scene.fog) return
+
+        const cameraStatus = this.cameraMapper.getStatus()
+        
+        if (cameraStatus.isUsingCustomCamera) {
+            // 使用自定义相机轨迹时，根据相机距离动态调整雾效
+            const cameraDistance = this.camera.position.length()
+            
+            // 动态计算雾效参数，确保在最远距离时圆环仍然可见
+            const baseFogNear = 10
+            const baseFogFar = 100
+            
+            // 根据相机距离扩展雾效范围
+            const distanceMultiplier = Math.max(1.0, cameraDistance / 50.0)
+            const newFogNear = baseFogNear * distanceMultiplier
+            const newFogFar = baseFogFar * distanceMultiplier * 2 // 远平面扩展更多
+            
+            this.scene.fog.near = newFogNear
+            this.scene.fog.far = newFogFar
+            
+            // 同时更新粒子系统中的雾效参数
+            if (this.particleSystem && this.particleSystem.particleMaterial && this.particleSystem.particleMaterial.uniforms) {
+                if (this.particleSystem.particleMaterial.uniforms.uFogNear) {
+                    this.particleSystem.particleMaterial.uniforms.uFogNear.value = newFogNear
+                }
+                if (this.particleSystem.particleMaterial.uniforms.uFogFar) {
+                    this.particleSystem.particleMaterial.uniforms.uFogFar.value = newFogFar
+                }
+            }
+            
+            // 调试信息 - 每秒输出一次
+            if (!this.lastFogDebugTime || Date.now() - this.lastFogDebugTime > 1000) {
+                console.log(`🌫️ 动态雾效: 相机距离=${cameraDistance.toFixed(1)}, 雾效范围=[${newFogNear.toFixed(1)}, ${newFogFar.toFixed(1)}]`)
+                this.lastFogDebugTime = Date.now()
+            }
+            
+        } else {
+            // 恢复到默认雾效设置
+            this.scene.fog.near = 10
+            this.scene.fog.far = 100
+            
+            if (this.particleSystem && this.particleSystem.particleMaterial && this.particleSystem.particleMaterial.uniforms) {
+                if (this.particleSystem.particleMaterial.uniforms.uFogNear) {
+                    this.particleSystem.particleMaterial.uniforms.uFogNear.value = 10.0
+                }
+                if (this.particleSystem.particleMaterial.uniforms.uFogFar) {
+                    this.particleSystem.particleMaterial.uniforms.uFogFar.value = 100.0
+                }
+            }
         }
     }
     
@@ -627,27 +750,60 @@ class HeroParticleApp {
             this.mouseStrength = 0.0
         })
 
-        // Keyboard shortcuts for animation control
+        // Keyboard shortcuts for animation and camera control
         window.addEventListener('keydown', (event) => {
             switch(event.key.toLowerCase()) {
                 case 'space':
                     event.preventDefault()
                     this.toggleAnimationMode()
                     break
+                case 'c':
+                    event.preventDefault()
+                    this.toggleCameraMode()
+                    break
                 case '1':
                     console.log('🎯 显示当前状态')
                     if (this.ringMapper) {
-                        console.log('映射器状态:', this.ringMapper.getStatus())
+                        console.log('圆环映射器状态:', this.ringMapper.getStatus())
+                    }
+                    if (this.cameraMapper) {
+                        console.log('相机映射器状态:', this.cameraMapper.getStatus())
                     }
                     if (this.trackExtractor) {
-                        console.log('提取器摘要:', this.trackExtractor.getExtractionSummary())
+                        console.log('轨迹提取器摘要:', this.trackExtractor.getExtractionSummary())
                     }
                     break
                 case '2':
-                    this.toggleAnimationMode(true) // 强制使用自定义轨迹
+                    this.toggleAnimationMode(true) // 强制使用自定义圆环轨迹
                     break
                 case '3':
-                    this.toggleAnimationMode(false) // 强制使用原始轨迹
+                    this.toggleAnimationMode(false) // 强制使用原始圆环轨迹
+                    break
+                case '4':
+                    this.toggleCameraMode(true) // 强制使用自定义相机轨迹
+                    break
+                case '5':
+                    this.toggleCameraMode(false) // 强制使用电影级相机
+                    break
+                case 'arrowright':
+                    // 加速动画
+                    if (this.cameraMapper) {
+                        const currentSpeed = this.cameraMapper.getStatus().animationSpeed
+                        this.cameraMapper.setAnimationSpeed(currentSpeed + 0.2)
+                    }
+                    break
+                case 'arrowleft':
+                    // 减速动画
+                    if (this.cameraMapper) {
+                        const currentSpeed = this.cameraMapper.getStatus().animationSpeed
+                        this.cameraMapper.setAnimationSpeed(currentSpeed - 0.2)
+                    }
+                    break
+                case 'p':
+                    // 暂停/恢复相机动画
+                    if (this.cameraMapper) {
+                        this.cameraMapper.togglePause()
+                    }
                     break
             }
         })
@@ -696,8 +852,11 @@ class HeroParticleApp {
 
         // === 系统更新阶段 ===
         
-        // 更新电影级相机系统，处理视角切换和平滑运动
-        this.updateCinematicCamera(deltaTime)
+        // 更新电影级相机系统（仅在未使用自定义相机时）
+        const cameraStatus = this.cameraMapper ? this.cameraMapper.getStatus() : { isUsingCustomCamera: false }
+        if (!cameraStatus.isUsingCustomCamera) {
+            this.updateCinematicCamera(deltaTime)
+        }
 
         // 处理鼠标交互效果的自然衰减
         // 使用0.95的衰减系数，实现平滑的交互效果消退
@@ -706,6 +865,14 @@ class HeroParticleApp {
         // 更新自定义圆环动画轨迹
         if (this.ringMapper) {
             this.ringMapper.updateCustomAnimation(deltaTime)
+        }
+
+        // 更新自定义相机动画轨迹
+        if (this.cameraMapper) {
+            this.cameraMapper.updateCustomCamera(deltaTime)
+            
+            // 动态调整雾效以确保圆环在相机轨迹中始终可见
+            this.updateDynamicFog()
         }
         
         // 更新粒子系统：先传递鼠标交互参数，再执行系统更新

@@ -256,16 +256,16 @@ export class HeroParticleSystem {
                 fragmentShader: particleFragmentShader,
                 uniforms: {
                     uBasePositions: { value: processedData.basePositionTexture },
-                    uPointSize: { value: 6.5 }, // Slightly larger for enhanced effects
-                    uOpacity: { value: 0.85 }, // Balanced opacity for new effects
+                    uPointSize: { value: 6.5 }, // 恢复原始尺寸
+                    uOpacity: { value: 0.85 }, // 恢复原始透明度
                     uTime: { value: 0.0 },
                     uMousePosition: { value: new THREE.Vector3() },
                     uMouseStrength: { value: 0.0 },
                     uMagneticStrength: { value: 2.0 },
                     uMorphingIntensity: { value: 0.5 },
-                    uFogNear: { value: 5.0 },
-                    uFogFar: { value: 50.0 },
-                    uAtmosphericColor: { value: new THREE.Color(0x74b9ff) },
+                    uFogNear: { value: 10.0 }, // 匹配主应用设置
+                    uFogFar: { value: 100.0 }, // 匹配主应用设置
+                    uAtmosphericColor: { value: new THREE.Color(0x94b9ff) }, // 更亮的大气色彩
                     uEnvironmentalShift: { value: 0.0 }
                 },
                 transparent: true,

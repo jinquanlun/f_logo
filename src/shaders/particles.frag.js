@@ -101,17 +101,22 @@ void main() {
     vec3 environmentalInfluence = uAtmosphericColor * uEnvironmentalShift * 0.3;
     finalColor = mix(finalColor, finalColor + environmentalInfluence, 0.4);
     
-    // Atmospheric depth fog
+    // Enhanced atmospheric depth fog with distance compensation
     float fogFactor = smoothstep(uFogNear, uFogFar, vDepth);
-    vec3 foggedColor = mix(finalColor, vec3(0.0), fogFactor * 0.7);
     
-    // Atmospheric glow for distant particles
-    float glowFactor = 1.0 - fogFactor;
-    vec3 atmosphericGlow = uAtmosphericColor * glowFactor * 0.2;
+    // Reduce fog effect for very distant particles to maintain visibility
+    float distanceCompensation = clamp(vDepth / 100.0, 0.0, 1.0);
+    float adjustedFogFactor = fogFactor * (1.0 - distanceCompensation * 0.3);
+    
+    vec3 foggedColor = mix(finalColor, vec3(0.0), adjustedFogFactor * 0.6); // Reduced fog intensity
+    
+    // Enhanced atmospheric glow for distant particles
+    float glowFactor = 1.0 - adjustedFogFactor;
+    vec3 atmosphericGlow = uAtmosphericColor * glowFactor * 0.3; // Increased glow
     foggedColor += atmosphericGlow;
     
-    // Apply fog to alpha as well
-    float foggedAlpha = alpha * (1.0 - fogFactor * 0.5);
+    // Gentler fog effect on alpha to maintain visibility at all distances
+    float foggedAlpha = alpha * (1.0 - adjustedFogFactor * 0.4);
 
     // Output enhanced color with atmospheric effects
     gl_FragColor = vec4(foggedColor, foggedAlpha);

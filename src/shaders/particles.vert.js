@@ -73,18 +73,25 @@ void main() {
     vWorldPosition = (modelMatrix * vec4(animatedPos, 1.0)).xyz;
     vDepth = length(viewPosition.xyz);
 
-    // Enhanced distance-based size calculation with pulsing
+    // Enhanced distance-based size calculation optimized for camera trajectories
     float distance = length(viewPosition.xyz);
     
     // Pulsing size effect
     float pulse = sin(uTime * 1.2 + distFromCenter * 3.0) * 0.15 + 0.85;
     
-    // Smoother distance falloff with better scaling
-    float sizeFactor = (1200.0 / (distance + 100.0)) * pulse;
+    // Improved distance falloff that maintains visibility at extreme distances
+    float sizeFactor = (1500.0 / (distance + 80.0)) * pulse;
+    
+    // Additional size compensation for very far distances (like camera trajectory endpoints)
+    if (distance > 80.0) {
+        float extraDistance = distance - 80.0;
+        sizeFactor *= (1.0 + extraDistance * 0.008); // Gentle size boost for far distances
+    }
+    
     gl_PointSize = uPointSize * sizeFactor;
 
-    // Dynamic size clamping based on depth
-    float minSize = mix(1.5, 3.0, clamp(distance / 500.0, 0.0, 1.0));
-    float maxSize = mix(8.0, 15.0, clamp(distance / 200.0, 0.0, 1.0));
+    // Enhanced dynamic size clamping for better visibility at all distances
+    float minSize = mix(2.0, 4.0, clamp(distance / 500.0, 0.0, 1.0));
+    float maxSize = mix(10.0, 20.0, clamp(distance / 150.0, 0.0, 1.0));
     gl_PointSize = clamp(gl_PointSize, minSize, maxSize);
 }`
