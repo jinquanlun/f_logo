@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Three.js Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            overflow: hidden;
+        }
+        #canvas {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    
+    <script type="module">
+        import * as THREE from 'three'
+        
+        // 基本设置
+        const canvas = document.getElementById('canvas')
+        const scene = new THREE.Scene()
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000)
+        const renderer = new THREE.WebGLRenderer({ canvas })
+        
+        renderer.setSize(window.innerWidth, window.innerHeight)
+        renderer.setClearColor(0x000000)
+        
+        // 创建一个红色立方体
+        const geometry = new THREE.BoxGeometry(2, 2, 2)
+        const material = new THREE.MeshBasicMaterial({ color: 0xff0000 })
+        const cube = new THREE.Mesh(geometry, material)
+        scene.add(cube)
+        
+        // 设置相机位置
+        camera.position.z = 5
+        
+        console.log('🔴 简单测试：红色立方体应该可见')
+        console.log('📷 相机位置:', camera.position)
+        console.log('🎯 立方体位置:', cube.position)
+        
+        // 渲染循环
+        function animate() {
+            requestAnimationFrame(animate)
+            
+            // 旋转立方体
+            cube.rotation.x += 0.01
+            cube.rotation.y += 0.01
+            
+            renderer.render(scene, camera)
+        }
+        
+        animate()
+        
+        // 窗口大小调整
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight
+            camera.updateProjectionMatrix()
+            renderer.setSize(window.innerWidth, window.innerHeight)
+        })
+    </script>
+</body>
+</html>

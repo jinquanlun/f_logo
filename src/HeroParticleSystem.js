@@ -79,25 +79,38 @@ export class HeroParticleSystem {
         }
 
         // Animation scene control - set to false to disable specific scenes
+        // 支持新旧两种动画命名格式
         this.enabledScenes = {
-            'Scenes_B_00100Action': true,     // Main ring animation
-            'Scenes_B_0023动作': false,        // Second ring animation - DISABLED
-            'Scenes_B_00100.001Action': false, // Smallest ring - always disabled
-            'vipAction.001': false             // VIP ring - always disabled
+            // 新模型动画名称 (Action.00X格式)
+            'Action.002': true,               // Main ring animation (新格式)
+            'Action.003': false,              // Second ring animation - DISABLED (新格式)
+            'Action.004': false,              // Smallest ring - always disabled (新格式)
+            'Action.005': false,              // VIP ring - always disabled (新格式)
+            
+            // 原始动画名称 (向后兼容)
+            'Scenes_B_00100Action': true,     // Main ring animation (原格式)
+            'Scenes_B_0023动作': false,        // Second ring animation - DISABLED (原格式)
+            'Scenes_B_00100.001Action': false, // Smallest ring - always disabled (原格式)
+            '素白艺术™_-_suby.cn/vipAction.001': false, // VIP ring - always disabled (原格式)
+            'vipAction.001': false             // VIP ring fallback name
         }
 
         this.processor = new SkinnedModelProcessor()
     }
     
     async init() {
+        console.log('🔍 HeroParticleSystem: 开始初始化...')
 
         // Find the first skinned mesh in the model
         this.skinnedMesh = this.findSkinnedMesh()
-        
+
         if (!this.skinnedMesh) {
+            console.log('⚠️ 未找到SkinnedMesh，使用静态网格创建粒子系统')
             this.createFromStaticMesh()
             return
         }
+
+        console.log('✅ 找到SkinnedMesh:', this.skinnedMesh.name)
         
         // Process the skinned mesh data
         const processedData = this.processor.processSkinnedMesh(this.skinnedMesh)
@@ -185,12 +198,16 @@ export class HeroParticleSystem {
         })
         
         if (bestMesh) {
+            console.log('✅ 找到最佳网格:', bestMesh.name, '顶点数:', maxVertices)
+
             // Significantly increase particle count for much better visual clarity
             const maxParticles = 120000 // Much higher limit for crisp detail
 
             // Process as static mesh (simplified version)
             const positions = bestMesh.geometry.attributes.position.array
             this.particleCount = Math.min(positions.length / 3, maxParticles)
+
+            console.log('🎨 创建粒子系统，粒子数量:', this.particleCount)
             
             // Calculate texture dimensions
             this.textureWidth = Math.ceil(Math.sqrt(this.particleCount))
@@ -234,6 +251,10 @@ export class HeroParticleSystem {
             if (this.animations.length > 0) {
                 this.setupAnimation()
             }
+
+            console.log('✅ 静态网格粒子系统创建完成')
+        } else {
+            console.error('❌ 未找到任何可用的网格来创建粒子系统')
         }
     }
     
@@ -295,10 +316,12 @@ export class HeroParticleSystem {
     }
     
     createParticleObject() {
+        console.log('🎨 创建粒子对象...')
         this.particles = new THREE.Points(this.particleGeometry, this.particleMaterial)
         this.particles.frustumCulled = false
         this.particles.visible = this.visible
         this.scene.add(this.particles)
+        console.log('✅ 粒子对象已添加到场景，可见性:', this.visible)
     }
     
     setupAnimation() {

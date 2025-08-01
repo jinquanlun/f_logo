@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>测试v5-final.glb模型</title>
+    <style>
+        body { margin: 0; background: #000; color: white; font-family: monospace; }
+        #info { position: absolute; top: 10px; left: 10px; z-index: 100; }
+        #controls { position: absolute; top: 10px; right: 10px; z-index: 100; }
+        button { margin: 5px; padding: 5px 10px; }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <div>状态: <span id="status">初始化中...</span></div>
+        <div>顶点数: <span id="vertices">0</span></div>
+        <div>模式: <span id="mode">网格</span></div>
+    </div>
+    <div id="controls">
+        <button onclick="toggleMode()">切换模式</button>
+        <button onclick="resetCamera()">重置相机</button>
+    </div>
+    
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.164.0/build/three.module.js",
+                "three/examples/jsm/loaders/GLTFLoader.js": "https://unpkg.com/three@0.164.0/examples/jsm/loaders/GLTFLoader.js",
+                "three/examples/jsm/loaders/DRACOLoader.js": "https://unpkg.com/three@0.164.0/examples/jsm/loaders/DRACOLoader.js",
+                "three/examples/jsm/controls/OrbitControls.js": "https://unpkg.com/three@0.164.0/examples/jsm/controls/OrbitControls.js"
+            }
+        }
+    </script>
+    
+    <script type="module">
+        import * as THREE from 'three'
+        import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+        import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
+        import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+
+        // 全局变量
+        let scene, camera, renderer, controls
+        let originalModel, particleSystem
+        let showParticles = false
+
+        function updateStatus(id, value) {
+            document.getElementById(id).textContent = value
+        }
+
+        // 初始化场景
+        function initScene() {
+            scene = new THREE.Scene()
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000)
+            renderer = new THREE.WebGLRenderer({ antialias: true })
+            
+            renderer.setSize(window.innerWidth, window.innerHeight)
+            renderer.setClearColor(0x000000)
+            document.body.appendChild(renderer.domElement)
+
+            // 轨道控制
+            controls = new OrbitControls(camera, renderer.domElement)
+            
+            // 光照
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.6)
+            scene.add(ambientLight)
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1)
+            directionalLight.position.set(5, 5, 5)
+            scene.add(directionalLight)
+
+            camera.position.set(0, 0, 10)
+            
+            updateStatus('status', '场景初始化完成')
+        }
+
+        // 加载模型
+        async function loadModel() {
+            try {
+                updateStatus('status', '加载模型中...')
+                
+                const dracoLoader = new DRACOLoader()
+                dracoLoader.setDecoderPath('/draco/')
+                
+                const loader = new GLTFLoader()
+                loader.setDRACOLoader(dracoLoader)
+                
+                const gltf = await new Promise((resolve, reject) => {
+                    loader.load('/v5-final.glb', resolve, undefined, reject)
+                })
+                
+                originalModel = gltf.scene
+                scene.add(originalModel)
+                
+                // 计算顶点数
+                let totalVertices = 0
+                originalModel.traverse((child) => {
+                    if (child.isMesh && child.geometry) {
+                        const count = child.geometry.attributes.position?.count || 0
+                        totalVertices += count
+                        console.log(`网格 ${child.name}: ${count} 顶点`)
+                    }
+                })
+                
+                updateStatus('vertices', totalVertices.toLocaleString())
+                
+                // 自动调整相机
+                const box = new THREE.Box3().setFromObject(originalModel)
+                const center = box.getCenter(new THREE.Vector3())
+                const size = box.getSize(new THREE.Vector3())
+                
+                console.log('模型尺寸:', size)
+                console.log('模型中心:', center)
+                
+                const maxDim = Math.max(size.x, size.y, size.z)
+                camera.position.set(center.x, center.y, center.z + maxDim * 2)
+                controls.target.copy(center)
+                controls.update()
+                
+                // 创建粒子系统
+                createParticleSystem()
+                
+                updateStatus('status', '模型加载完成')
+                
+            } catch (error) {
+                updateStatus('status', '加载失败: ' + error.message)
+                console.error('模型加载错误:', error)
+            }
+        }
+
+        // 创建粒子系统
+        function createParticleSystem() {
+            const vertices = []
+            
+            originalModel.traverse((child) => {
+                if (child.isMesh && child.geometry) {
+                    const positionAttribute = child.geometry.attributes.position
+                    
+                    if (positionAttribute) {
+                        child.updateMatrixWorld()
+                        
+                        for (let i = 0; i < positionAttribute.count; i++) {
+                            const vertex = new THREE.Vector3()
+                            vertex.fromBufferAttribute(positionAttribute, i)
+                            vertex.applyMatrix4(child.matrixWorld)
+                            vertices.push(vertex.x, vertex.y, vertex.z)
+                        }
+                    }
+                }
+            })
+            
+            console.log(`创建 ${vertices.length / 3} 个粒子`)
+            
+            const particleGeometry = new THREE.BufferGeometry()
+            particleGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3))
+            
+            const particleMaterial = new THREE.PointsMaterial({
+                color: 0x88ccff,
+                size: 0.05,
+                transparent: true,
+                opacity: 0.8,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            })
+            
+            particleSystem = new THREE.Points(particleGeometry, particleMaterial)
+            particleSystem.visible = false
+            scene.add(particleSystem)
+        }
+
+        // 切换显示模式
+        window.toggleMode = function() {
+            showParticles = !showParticles
+            
+            if (originalModel) {
+                originalModel.visible = !showParticles
+            }
+            
+            if (particleSystem) {
+                particleSystem.visible = showParticles
+            }
+            
+            updateStatus('mode', showParticles ? '粒子' : '网格')
+        }
+
+        // 重置相机
+        window.resetCamera = function() {
+            if (originalModel) {
+                const box = new THREE.Box3().setFromObject(originalModel)
+                const center = box.getCenter(new THREE.Vector3())
+                const size = box.getSize(new THREE.Vector3())
+                
+                const maxDim = Math.max(size.x, size.y, size.z)
+                camera.position.set(center.x, center.y, center.z + maxDim * 2)
+                controls.target.copy(center)
+                controls.update()
+            }
+        }
+
+        // 渲染循环
+        function animate() {
+            requestAnimationFrame(animate)
+            controls.update()
+            renderer.render(scene, camera)
+        }
+
+        // 启动
+        initScene()
+        loadModel()
+        animate()
+
+        // 窗口调整
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight
+            camera.updateProjectionMatrix()
+            renderer.setSize(window.innerWidth, window.innerHeight)
+        })
+    </script>
+</body>
+</html>

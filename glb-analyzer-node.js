@@ -324,9 +324,172 @@ class GLBAnalyzer {
         console.log('-'.repeat(60));
     }
 
+    generateDetailedComparison() {
+        console.log('\n🔍 DETAILED BINARY COMPARISON');
+        console.log('='.repeat(80));
+        
+        const [original, newFile] = this.analysisResults;
+        if (!original || !newFile) return;
+
+        // File size comparison
+        const originalSizeKB = this.parseFileSize(original.fileSize);
+        const newSizeKB = this.parseFileSize(newFile.fileSize);
+        const sizeDiff = newSizeKB - originalSizeKB;
+        const sizePercent = ((sizeDiff / originalSizeKB) * 100).toFixed(1);
+
+        console.log('\n📏 FILE SIZE ANALYSIS:');
+        console.log(`   Original: ${original.fileSize}`);
+        console.log(`   New:      ${newFile.fileSize}`);
+        console.log(`   Change:   ${sizeDiff > 0 ? '+' : ''}${(sizeDiff/1024).toFixed(2)} MB (${sizePercent > 0 ? '+' : ''}${sizePercent}%)`);
+
+        // Component count comparison
+        console.log('\n🎯 COMPONENT COUNT COMPARISON:');
+        console.log(`   Meshes:     ${original.meshes.length} → ${newFile.meshes.length} (${newFile.meshes.length - original.meshes.length >= 0 ? '+' : ''}${newFile.meshes.length - original.meshes.length})`);
+        console.log(`   Materials:  ${original.materials.length} → ${newFile.materials.length} (${newFile.materials.length - original.materials.length >= 0 ? '+' : ''}${newFile.materials.length - original.materials.length})`);
+        console.log(`   Bones:      ${original.bones.length} → ${newFile.bones.length} (${newFile.bones.length - original.bones.length >= 0 ? '+' : ''}${newFile.bones.length - original.bones.length})`);
+        console.log(`   Cameras:    ${original.cameras.length} → ${newFile.cameras.length} (${newFile.cameras.length - original.cameras.length >= 0 ? '+' : ''}${newFile.cameras.length - original.cameras.length})`);
+        console.log(`   Scenes:     ${original.scenes.length} → ${newFile.scenes.length} (${newFile.scenes.length - original.scenes.length >= 0 ? '+' : ''}${newFile.scenes.length - original.scenes.length})`);
+        console.log(`   Animations: ${original.animations.length} → ${newFile.animations.length} (${newFile.animations.length - original.animations.length >= 0 ? '+' : ''}${newFile.animations.length - original.animations.length})`);
+
+        // Animation compatibility analysis
+        console.log('\n🎬 ANIMATION COMPATIBILITY ANALYSIS:');
+        const originalAnimNames = original.animations.map(a => a.name);
+        const newAnimNames = newFile.animations.map(a => a.name);
+        
+        const commonAnims = originalAnimNames.filter(name => newAnimNames.includes(name));
+        const removedAnims = originalAnimNames.filter(name => !newAnimNames.includes(name));
+        const addedAnims = newAnimNames.filter(name => !originalAnimNames.includes(name));
+
+        console.log(`   Common animations: ${commonAnims.length}`);
+        if (commonAnims.length > 0) {
+            commonAnims.forEach(name => console.log(`     ✅ ${name}`));
+        }
+
+        if (removedAnims.length > 0) {
+            console.log(`   Removed animations: ${removedAnims.length}`);
+            removedAnims.forEach(name => console.log(`     ❌ ${name}`));
+        }
+
+        if (addedAnims.length > 0) {
+            console.log(`   Added animations: ${addedAnims.length}`);
+            addedAnims.forEach(name => console.log(`     ➕ ${name}`));
+        }
+
+        // Particle system compatibility check
+        console.log('\n⚡ PARTICLE SYSTEM COMPATIBILITY:');
+        const originalSkinned = original.meshes.filter(m => m.hasJoints && m.hasWeights).length;
+        const newSkinned = newFile.meshes.filter(m => m.hasJoints && m.hasWeights).length;
+        
+        console.log(`   Skinned meshes: ${originalSkinned} → ${newSkinned}`);
+        
+        if (newSkinned > 0) {
+            console.log('   ✅ Has skinned meshes - Compatible with SkinnedModelProcessor');
+        } else {
+            console.log('   ⚠️  No skinned meshes found - May need fallback processing');
+        }
+
+        // Required animation check for current system
+        console.log('\n🔧 CURRENT SYSTEM REQUIREMENTS CHECK:');
+        const requiredAnimations = [
+            'Scenes_B_00100Action',
+            'Scenes_B_0023动作', 
+            'Scenes_B_00100.001Action',
+            'vipAction.001'
+        ];
+
+        requiredAnimations.forEach(reqAnim => {
+            const hasExact = newAnimNames.includes(reqAnim);
+            const hasPartial = newAnimNames.some(name => name.includes(reqAnim.replace('Action', '').replace('动作', '')));
+            
+            if (hasExact) {
+                console.log(`   ✅ ${reqAnim} - Found exact match`);
+            } else if (hasPartial) {
+                const match = newAnimNames.find(name => name.includes(reqAnim.replace('Action', '').replace('动作', '')));
+                console.log(`   ⚠️  ${reqAnim} - Found similar: "${match}"`);
+            } else {
+                console.log(`   ❌ ${reqAnim} - Not found`);
+            }
+        });
+
+        // Replacement recommendation
+        console.log('\n💡 REPLACEMENT RECOMMENDATION:');
+        const compatibilityScore = this.calculateCompatibilityScore(original, newFile, commonAnims, requiredAnimations, newAnimNames);
+        
+        if (compatibilityScore >= 80) {
+            console.log('   🟢 HIGH COMPATIBILITY - Safe to replace with minimal code changes');
+        } else if (compatibilityScore >= 60) {
+            console.log('   🟡 MEDIUM COMPATIBILITY - Requires some code adjustments');
+        } else {
+            console.log('   🔴 LOW COMPATIBILITY - Significant changes required');
+        }
+        
+        console.log(`   Compatibility Score: ${compatibilityScore}/100`);
+    }
+
+    parseFileSize(sizeString) {
+        const parts = sizeString.split(' ');
+        const value = parseFloat(parts[0]);
+        const unit = parts[1];
+        
+        switch(unit) {
+            case 'Bytes': return value / 1024;
+            case 'KB': return value;
+            case 'MB': return value * 1024;
+            case 'GB': return value * 1024 * 1024;
+            default: return value;
+        }
+    }
+
+    calculateCompatibilityScore(original, newFile, commonAnims, requiredAnimations, newAnimNames) {
+        let score = 0;
+        
+        // File size impact (20 points max)
+        const originalSize = this.parseFileSize(original.fileSize);
+        const newSize = this.parseFileSize(newFile.fileSize);
+        const sizeIncrease = (newSize - originalSize) / originalSize;
+        
+        if (sizeIncrease < 0.1) score += 20;      // Size similar or smaller
+        else if (sizeIncrease < 0.3) score += 15; // Small increase
+        else if (sizeIncrease < 0.5) score += 10; // Moderate increase
+        else score += 5;                          // Large increase
+
+        // Animation compatibility (40 points max)
+        const animCompatibility = requiredAnimations.reduce((acc, reqAnim) => {
+            const hasExact = newAnimNames.includes(reqAnim);
+            const hasPartial = newAnimNames.some(name => name.includes(reqAnim.replace('Action', '').replace('动作', '')));
+            
+            if (hasExact) return acc + 10;
+            if (hasPartial) return acc + 7;
+            return acc;
+        }, 0);
+        score += animCompatibility;
+
+        // Mesh compatibility (20 points max)
+        const originalSkinned = original.meshes.filter(m => m.hasJoints && m.hasWeights).length;
+        const newSkinned = newFile.meshes.filter(m => m.hasJoints && m.hasWeights).length;
+        
+        if (newSkinned > 0) score += 20;    // Has skinned meshes
+        else if (newFile.meshes.length > 0) score += 10; // Has meshes but not skinned
+
+        // Structure compatibility (20 points max)
+        const meshDiff = Math.abs(newFile.meshes.length - original.meshes.length);
+        const boneDiff = Math.abs(newFile.bones.length - original.bones.length);
+        
+        if (meshDiff === 0 && boneDiff === 0) score += 20;      // Identical structure
+        else if (meshDiff <= 2 && boneDiff <= 5) score += 15;   // Very similar
+        else if (meshDiff <= 5 && boneDiff <= 10) score += 10;  // Somewhat similar
+        else score += 5;                                        // Different structure
+
+        return Math.min(100, score);
+    }
+
     generateComparisonReport() {
         console.log('\n📊 COMPREHENSIVE COMPARISON ANALYSIS');
         console.log('='.repeat(80));
+
+        if (this.analysisResults.length === 2) {
+            this.generateDetailedComparison();
+        }
 
         // Duration comparison table
         console.log('\n⏱️  DURATION COMPARISON TABLE:');
@@ -496,11 +659,8 @@ async function analyzeAllFiles() {
     const analyzer = new GLBAnalyzer();
     
     const filesToAnalyze = [
-        'public/LOST_cut2_v31-transformed.glb',
-        'public/Scenes_B_00100-transformed.glb',
-        'public/Scenes_B_00100.001-transformed.glb', 
-        'public/Scenes_B_0023-transformed.glb',
-        'public/cam_cut2_v3cam.glb'
+        'v5-transformed.glb',
+        'LOST_cut2_v5-transformed.glb'
     ];
 
     console.log('🚀 Starting GLB Animation Analysis');

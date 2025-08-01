@@ -29,10 +29,6 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
 import { HeroParticleSystem } from './HeroParticleSystem.js'
-import { MasterAnimationController } from './MasterAnimationController.js'
-import { AnimationTrackExtractor } from './AnimationTrackExtractor.js'
-import { RingAnimationMapper } from './RingAnimationMapper.js'
-import { CameraAnimationMapper } from './CameraAnimationMapper.js'
 
 /**
  * 主应用程序类 - 3D粒子系统的核心控制器
@@ -66,24 +62,19 @@ class HeroParticleApp {
         // 获取HTML中的Canvas元素，作为WebGL渲染目标
         this.canvas = document.getElementById('three-canvas')
 
-        // 初始化动画系统组件
-        this.masterController = null // 主动画控制器
-        this.trackExtractor = new AnimationTrackExtractor()
-        this.ringMapper = null // 圆环动画映射器
-        this.cameraMapper = null // 相机动画映射器
-
-        // Animation sequence control
-        this.animationSequenceState = {
-            heroComplete: false,
-            cameraAndRingStarted: false,
-            allComplete: false
-        }
+        // 简化初始化，只保留必要组件
+        this.particleSystem = null
 
         // 按顺序执行初始化流程
         this.init()              // 初始化Three.js基础组件
-        this.loadModel()         // 异步加载3D模型
         this.setupEventListeners() // 设置事件监听
-        this.animate()           // 启动渲柕循环
+
+        // 先启动渲染循环显示基本场景
+        this.animate()
+
+        // 重新启用模型加载
+        this.loadModel()
+        console.log('🔧 开始加载v5-moderate.glb模型')
     }
     
     /**
@@ -110,8 +101,13 @@ class HeroParticleApp {
         this.scene = new THREE.Scene()
 
         // === 背景系统 ===
-        // 生成深空主题的渐变背景，为粒子效果提供合适的对比度
-        this.createGradientBackground()
+        // 暂时禁用背景，使用简单的深灰色背景进行调试
+        // this.createGradientBackground()
+        this.scene.background = new THREE.Color(0x222222) // 深灰色背景，便于看到红色立方体
+        console.log('🎨 使用简单背景进行调试')
+
+        // 移除测试立方体，专注于模型显示
+        // this.addTestCube()
         
         // === 相机设置 ===
         // 计算窗口宽高比，确保相机视角与屏幕比例一致
@@ -121,8 +117,13 @@ class HeroParticleApp {
         // 参数：视野角(75°)、宽高比、近裁剪面(0.1)、远裁剪面(1000)
         this.camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000)
         
-        // 设置相机初始位置，后续将被电影级相机系统覆盖
-        this.camera.position.set(4, 4, 4)
+        // 设置相机初始位置 - 简单的正面视角
+        this.camera.position.set(0, 0, 10)
+        this.camera.lookAt(0, 0, 0)
+
+        console.log('📷 初始相机设置:')
+        console.log('  - 位置:', this.camera.position)
+        console.log('  - 朝向:', this.camera.getWorldDirection(new THREE.Vector3()))
         
         // === 渲柕器配置 ===
         // 创建WebGL渲柕器，启用高质量渲柕特性
@@ -134,6 +135,16 @@ class HeroParticleApp {
         
         // 设置渲柕尺寸为全屏
         this.renderer.setSize(window.innerWidth, window.innerHeight)
+
+        // 设置渲染器清除颜色为蓝色，用于调试
+        this.renderer.setClearColor(0x0000ff, 1.0) // 蓝色背景
+
+        // 调试信息
+        console.log('🖥️ 渲染器设置:')
+        console.log('  - Canvas尺寸:', this.canvas.width, 'x', this.canvas.height)
+        console.log('  - 窗口尺寸:', window.innerWidth, 'x', window.innerHeight)
+        console.log('  - 像素比:', this.renderer.getPixelRatio())
+        console.log('  - 清除颜色: 蓝色 (用于调试)')
         
         // 限制像素比为2，平衡渲柕质量与性能
         // 在高DPI设备上避免过度渲柕导致的性能问题
@@ -210,12 +221,11 @@ class HeroParticleApp {
         this.mouseStrength = 0.0
 
         // === 电影级相机系统 ===
-        // 初始化高级相机运动系统，实现电影级的视角切换效果
-        this.setupCinematicCamera()
+        // 暂时禁用复杂相机系统，使用固定相机进行调试
+        // this.setupCinematicCamera()
+        console.log('🎬 使用简单固定相机进行调试')
 
-        // === 相机动画映射器初始化 ===
-        // 创建相机动画映射器，用于应用自定义相机轨迹
-        this.cameraMapper = new CameraAnimationMapper(this.camera, this.scene)
+        // 简化初始化，移除复杂的动画系统
     }
 
     /**
@@ -262,6 +272,9 @@ class HeroParticleApp {
 
         // 将生成的纹理应用为场景背景
         this.scene.background = texture
+
+        // 添加测试立方体来验证渲染
+        this.addTestCube()
     }
 
     /**
@@ -456,175 +469,89 @@ class HeroParticleApp {
     
     async loadModel() {
         try {
-            // Set up DRACO loader for compressed models
+            // v5-moderate.glb使用DRACO压缩，必须启用DRACOLoader
+            const loader = new GLTFLoader()
             const dracoLoader = new DRACOLoader()
             dracoLoader.setDecoderPath('/draco/')
-
-            const loader = new GLTFLoader()
             loader.setDRACOLoader(dracoLoader)
 
+            // 直接加载v5-moderate.glb模型
+            const modelPath = '/v5-moderate.glb'
+            console.log('📦 加载模型:', modelPath)
+
             const gltf = await new Promise((resolve, reject) => {
-                loader.load('/v5-transformed.glb', resolve, undefined, reject)
+                loader.load(
+                    modelPath,
+                    resolve,
+                    undefined,
+                    reject
+                )
             })
 
             this.model = gltf.scene
             this.animations = gltf.animations
 
+            // 调试模型信息
+            console.log('📊 模型信息:')
+            console.log('  - 场景对象数量:', this.model.children.length)
+            console.log('  - 动画数量:', this.animations.length)
+
+            // 遍历模型查找网格
+            let meshCount = 0
+            let skinnedMeshCount = 0
+            this.model.traverse((child) => {
+                if (child.isMesh) {
+                    meshCount++
+                    if (child.isSkinnedMesh) {
+                        skinnedMeshCount++
+                        console.log('  - 找到SkinnedMesh:', child.name)
+                    } else {
+                        console.log('  - 找到Mesh:', child.name)
+                    }
+                }
+            })
+            console.log(`  - 总网格数: ${meshCount}, SkinnedMesh数: ${skinnedMeshCount}`)
+
             // Add model to scene
             this.scene.add(this.model)
+            console.log('✅ v5-moderate.glb模型已添加到场景')
+            console.log('  - 模型可见性:', this.model.visible)
+            console.log('  - 场景中对象数量:', this.scene.children.length)
 
             // Auto-position camera to fit model
             this.fitCameraToModel()
 
-            // Initialize particle system
-            this.particleSystem = new HeroParticleSystem(this.scene, this.model, this.animations)
-            await this.particleSystem.init()
+            // 暂时禁用粒子系统，专注于显示模型
+            // console.log('🎨 初始化粒子系统...')
+            // this.particleSystem = new HeroParticleSystem(this.scene, this.model, this.animations)
+            // await this.particleSystem.init()
+            console.log('🔧 调试模式：禁用粒子系统，只显示模型')
 
-            // Initialize ring animation mapper
-            this.ringMapper = new RingAnimationMapper(this.scene, this.model)
+            // 只初始化粒子系统，不加载额外的模型
+            console.log('🎉 模型加载完成，只使用粒子系统')
 
-            // Initialize master animation controller
-            this.masterController = new MasterAnimationController(this.camera, this.scene)
-            await this.masterController.loadMasterFile()
-
-            // Load custom animation tracks for rings
-            await this.loadCustomAnimationTracks()
-
-            // Setup animation sequence: Hero -> (Camera + Ring)
-            this.setupCombinedAnimationSequence()
+            console.log('🎉 模型和动画系统初始化完成')
 
         } catch (error) {
-            console.error('Error loading model:', error)
-        }
-    }
-
-    /**
-     * 加载自定义动画轨迹
-     * 从GLB文件中提取圆环动画数据并应用到场景
-     */
-    async loadCustomAnimationTracks() {
-        try {
-            console.log('🎬 开始加载自定义动画轨迹...')
-
-            // 提取所有圆环的动画轨迹
-            const extractedTracks = await this.trackExtractor.extractAllRingTracks()
-
-            if (extractedTracks.length > 0) {
-                // 将提取的轨迹数据转换为Map格式
-                const tracksMap = new Map()
-                extractedTracks.forEach(trackData => {
-                    tracksMap.set(trackData.ringType, trackData)
-                })
-
-                // 应用自定义轨迹到圆环
-                const success = this.ringMapper.applyCustomTracks(tracksMap)
-
-                if (success) {
-                    console.log('✅ 自定义动画轨迹加载成功!')
-                } else {
-                    console.warn('⚠️ 自定义动画轨迹应用失败')
-                }
-            } else {
-                console.warn('⚠️ 没有找到有效的动画轨迹数据')
-            }
-
-        } catch (error) {
-            console.error('❌ 加载自定义动画轨迹失败:', error)
+            console.error('❌ 模型加载失败:', error)
         }
     }
 
 
 
-    /**
-     * Setup combined animation sequence control
-     * Hero animation -> (Camera + Ring animations together) -> Complete
-     */
-    setupCombinedAnimationSequence() {
-        if (!this.particleSystem || !this.masterController || !this.ringMapper) {
-            console.warn('⚠️ 动画系统未完全初始化，无法设置序列控制')
-            return
-        }
 
-        // Set callback for when Hero animation completes
-        this.particleSystem.setOnAnimationComplete(() => {
-            console.log('🎬 Hero动画完成，准备同时启动相机和圆环动画...')
-            this.animationSequenceState.heroComplete = true
 
-            // Start both camera and ring animations simultaneously
-            setTimeout(() => {
-                let cameraStarted = false
-                let ringStarted = false
-
-                // Start camera animation
-                if (this.masterController.startMasterAnimation()) {
-                    cameraStarted = true
-                    console.log('� 相机动画已启动')
-                } else {
-                    console.warn('⚠️ 相机动画启动失败')
-                }
-
-                // Start ring animation
-                if (this.ringMapper.startAnimation()) {
-                    ringStarted = true
-                    console.log('🔄 圆环动画已启动')
-                } else {
-                    console.warn('⚠️ 圆环动画启动失败')
-                }
-
-                if (cameraStarted || ringStarted) {
-                    this.animationSequenceState.cameraAndRingStarted = true
-                    console.log('✨ 相机和圆环动画同时进行中...')
-                }
-            }, 500) // 0.5 second delay for smooth transition
-        })
-
-        console.log('🎬 组合动画序列控制已设置：Hero -> (Camera + Ring) -> 完成')
-    }
-
-    /**
-     * Reset the entire animation sequence
-     */
-    resetAnimationSequence() {
-        console.log('🔄 重置动画序列...')
-
-        // Reset sequence state
-        this.animationSequenceState = {
-            heroComplete: false,
-            cameraAndRingStarted: false,
-            allComplete: false
-        }
-
-        // Reset individual animations
+    // 简化版本，移除复杂的动画序列控制
+    setupSimpleParticleSystem() {
+        // 简化的粒子系统设置，不需要复杂的序列控制
         if (this.particleSystem) {
-            this.particleSystem.resetAnimation()
-        }
-
-        if (this.masterController) {
-            this.masterController.hasCompleted = false
-            this.masterController.isPlaying = false
-            this.masterController.masterTime = 0
-        }
-
-        if (this.ringMapper) {
-            this.ringMapper.resetAnimation()
-        }
-
-        console.log('✅ 动画序列已重置，可以重新播放')
-    }
-
-    /**
-     * Get current animation sequence status
-     */
-    getAnimationSequenceStatus() {
-        return {
-            ...this.animationSequenceState,
-            heroAnimationTime: this.particleSystem ? this.particleSystem.customAnimationTime : 0,
-            cameraAnimationTime: this.masterController ? this.masterController.getCurrentTime() : 0,
-            ringAnimationTime: this.ringMapper ? this.ringMapper.customAnimationTime : 0,
-            cameraAnimationComplete: this.masterController ? this.masterController.isAnimationComplete() : false,
-            ringAnimationComplete: this.ringMapper ? this.ringMapper.isComplete() : false
+            console.log('✅ 粒子系统已准备就绪')
         }
     }
+
+
+
+
 
 
 
@@ -638,46 +565,48 @@ class HeroParticleApp {
         const size = box.getSize(new THREE.Vector3()).length()
         const center = box.getCenter(new THREE.Vector3())
 
-        // Update cinematic camera positions based on model size and center
-        // Optimized distances for enhanced particle detail visibility
-        this.cameraPositions = [
-            {
-                // Position 1: Interior upward view - dramatic wormhole perspective
-                position: new THREE.Vector3(
-                   center.x + size * -0.212,                // X轴：摄像机在模型中心
-                   center.y + size * 0.159,  // Y轴：摄像机在结构底部
-                   center.z + size * 0.018
-                   // Z轴：摄像机在模型中心深度
-                ),
-                target: new THREE.Vector3(
-                    center.x + size * 0.633,              // X轴：直视上方，无偏移
-                    center.y + size * -0.094,  // Y轴：看向结构顶部开口
-                    center.z + size * -0.510                // Z轴：直视上方，无偏移
-                ),
-                name: "Interior Upward View"
-            },
-            {
-                // Position 2: Intimidating low angle - creates towering, imposing presence
-                position: new THREE.Vector3(
-                    center.x + size * 0.04,
-                    center.y + size * 0.004,  // 从 -0.28 调整为 -0.15 (提高摄像机位置)
-                    center.z + size * 0.088
-                ),
-                target: new THREE.Vector3(
-                    center.x - size * 0.606,
-                    center.y - size * 0.095,  // 从 +0.20 调整为 +0.05 (降低目标点)
-                    center.z + size * -0.750
-                ),
-                name: "Intimidating Low Angle"
-            }
-        ]
+        console.log('📐 模型边界信息:')
+        console.log('  - 中心点:', center)
+        console.log('  - 尺寸:', size)
+        console.log('  - 边界盒:', box)
 
-        // Reset camera animation state and set initial position
-        this.currentCameraIndex = 0
-        this.cameraTransitionTime = 0
-        this.cameraHoldTime = 0
-        this.isTransitioning = false
-        this.setCameraToPosition(0)
+        // 为v5-moderate.glb设置合适的相机位置
+        // 这个模型比较大，需要足够的距离来观看
+        const distance = Math.max(size * 1.5, 50) // 确保足够远的距离
+
+        // 直接设置相机位置，不使用复杂的相机系统
+        this.camera.position.set(distance, distance * 0.6, distance * 0.8)
+        this.camera.lookAt(center)
+
+        console.log('📷 v5-moderate.glb相机设置:')
+        console.log('  - 模型中心:', center)
+        console.log('  - 模型尺寸:', size)
+        console.log('  - 相机距离:', distance)
+        console.log('  - 相机位置:', this.camera.position)
+        console.log('  - 相机目标:', center)
+
+        // 简化版本：直接使用固定相机位置，不需要动画系统
+        console.log('✅ 相机位置已设置为查看v5-moderate.glb模型')
+    }
+
+    addTestCube() {
+        // 创建一个大的、明显的测试立方体
+        const geometry = new THREE.BoxGeometry(2, 2, 2)
+        const material = new THREE.MeshBasicMaterial({
+            color: 0xff0000,
+            side: THREE.DoubleSide  // 双面材质，确保可见
+        })
+        const cube = new THREE.Mesh(geometry, material)
+        cube.position.set(0, 0, 0)
+        this.scene.add(cube)
+
+        // 添加旋转动画，让立方体更容易被发现
+        this.testCube = cube
+
+        console.log('🔴 测试立方体已添加到场景中心')
+        console.log('  - 尺寸: 2x2x2')
+        console.log('  - 位置:', cube.position)
+        console.log('  - 材质颜色: 红色')
     }
     
     setupEventListeners() {
@@ -715,37 +644,18 @@ class HeroParticleApp {
             switch(event.key.toLowerCase()) {
                 case '1':
                     console.log('🎯 显示当前状态')
-                    console.log('动画序列状态:', this.getAnimationSequenceStatus())
-                    break
-                case 'arrowright':
-                    // 加速动画
-                    if (this.cameraMapper) {
-                        const currentSpeed = this.cameraMapper.getStatus().animationSpeed
-                        this.cameraMapper.setAnimationSpeed(currentSpeed + 0.2)
+                    if (this.particleSystem) {
+                        console.log('粒子系统状态: 运行中')
                     }
                     break
-                case 'arrowleft':
-                    // 减速动画
-                    if (this.cameraMapper) {
-                        const currentSpeed = this.cameraMapper.getStatus().animationSpeed
-                        this.cameraMapper.setAnimationSpeed(currentSpeed - 0.2)
-                    }
-                    break
-                case 'p':
-                    // 暂停/恢复相机动画
-                    if (this.cameraMapper) {
-                        this.cameraMapper.togglePause()
-                    }
-                    break
+
                 case 'r':
-                    // 重置动画序列
+                    // 重置粒子动画
                     event.preventDefault()
-                    this.resetAnimationSequence()
-                    break
-                case 's':
-                    // 显示动画序列状态
-                    event.preventDefault()
-                    console.log('🎬 动画序列状态:', this.getAnimationSequenceStatus())
+                    if (this.particleSystem) {
+                        this.particleSystem.resetAnimation()
+                        console.log('🔄 粒子动画已重置')
+                    }
                     break
             }
         })
@@ -792,53 +702,32 @@ class HeroParticleApp {
         deltaTime = this.lastDeltaTime * 0.1 + deltaTime * 0.9
         this.lastDeltaTime = deltaTime
 
-        // === 系统更新阶段 ===
-        
-        // 更新电影级相机系统（仅在未使用自定义相机时）
-        const cameraStatus = this.cameraMapper ? this.cameraMapper.getStatus() : { isUsingCustomCamera: false }
-        if (!cameraStatus.isUsingCustomCamera) {
-            this.updateCinematicCamera(deltaTime)
-        }
+        // === 简化的系统更新 ===
+
+        // 更新电影级相机系统（调试模式下禁用）
+        // this.updateCinematicCamera(deltaTime)
 
         // 处理鼠标交互效果的自然衰减
-        // 使用0.95的衰减系数，实现平滑的交互效果消退
         this.mouseStrength *= 0.95
-        
-        // 更新主动画控制器（相机动画）
-        if (this.masterController) {
-            this.masterController.update(deltaTime)
-        }
 
-        // 更新圆环动画
-        if (this.ringMapper) {
-            this.ringMapper.updateCustomAnimation(deltaTime)
-        }
-
-        // Check if both camera and ring animations are complete
-        if (this.masterController && this.ringMapper && !this.animationSequenceState.allComplete) {
-            const cameraComplete = this.masterController.isAnimationComplete()
-            const ringComplete = this.ringMapper.isComplete()
-
-            if (cameraComplete && ringComplete) {
-                this.animationSequenceState.allComplete = true
-                console.log('✅ 整个动画序列播放完成！(相机+圆环)')
-            }
+        // 旋转测试立方体，使其更容易被发现
+        if (this.testCube) {
+            this.testCube.rotation.x += 0.01
+            this.testCube.rotation.y += 0.01
         }
         
-        // 更新粒子系统：先传递鼠标交互参数，再执行系统更新
-        if (this.particleSystem) {
-            // 更新鼠标交互参数，包括3D位置和影响强度
-            this.particleSystem.updateMouseInteraction(this.mouseInfluence, this.mouseStrength)
-            
-            // 执行粒子系统的主更新逻辑（动画、效果、材质等）
-            this.particleSystem.update(deltaTime)
-        }
+        // 暂时禁用粒子系统更新，专注于模型显示
+        // if (this.particleSystem) {
+        //     this.particleSystem.updateMouseInteraction(this.mouseInfluence, this.mouseStrength)
+        //     this.particleSystem.update(deltaTime)
+        // }
 
         // === 渲柕输出阶段 ===
         // 执行最终渲柕，将所有更新后的内容输出到屏幕
         // 参数：场景对象和相机对象
         this.renderer.render(this.scene, this.camera)
     }
+
 }
 
 // Initialize the app

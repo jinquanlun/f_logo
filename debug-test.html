@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>粒子系统调试测试</title>
+    <style>
+        body { margin: 0; padding: 0; background: #000; overflow: hidden; }
+        #info { position: absolute; top: 10px; left: 10px; color: white; font-family: monospace; z-index: 100; }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <div>状态: <span id="status">初始化中...</span></div>
+        <div>模型: <span id="model-status">未加载</span></div>
+        <div>粒子: <span id="particle-status">未创建</span></div>
+        <div>动画: <span id="animation-status">未启动</span></div>
+    </div>
+    
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.164.0/build/three.module.js",
+                "three/examples/jsm/loaders/GLTFLoader.js": "https://unpkg.com/three@0.164.0/examples/jsm/loaders/GLTFLoader.js",
+                "three/examples/jsm/loaders/DRACOLoader.js": "https://unpkg.com/three@0.164.0/examples/jsm/loaders/DRACOLoader.js"
+            }
+        }
+    </script>
+    
+    <script type="module">
+        import * as THREE from 'three'
+        import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+        import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
+
+        // 状态更新函数
+        function updateStatus(id, message) {
+            document.getElementById(id).textContent = message
+            console.log(`${id}: ${message}`)
+        }
+
+        // 创建基本场景
+        const scene = new THREE.Scene()
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000)
+        const renderer = new THREE.WebGLRenderer({ antialias: true })
+        
+        renderer.setSize(window.innerWidth, window.innerHeight)
+        renderer.setClearColor(0x000000)
+        document.body.appendChild(renderer.domElement)
+
+        // 添加基本光照
+        const ambientLight = new THREE.AmbientLight(0x404040, 0.6)
+        scene.add(ambientLight)
+        
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1)
+        directionalLight.position.set(5, 5, 5)
+        scene.add(directionalLight)
+
+        // 设置相机位置
+        camera.position.set(0, 0, 5)
+
+        updateStatus('status', '场景创建完成')
+
+        // 加载模型
+        async function loadModel() {
+            try {
+                const dracoLoader = new DRACOLoader()
+                dracoLoader.setDecoderPath('/draco/')
+                
+                const loader = new GLTFLoader()
+                loader.setDRACOLoader(dracoLoader)
+                
+                updateStatus('model-status', '加载中...')
+                
+                const gltf = await new Promise((resolve, reject) => {
+                    loader.load('/v5-transformed.glb', resolve, undefined, (error) => {
+                        console.error('模型加载失败:', error)
+                        reject(error)
+                    })
+                })
+                
+                updateStatus('model-status', '加载成功')
+                
+                // 添加模型到场景
+                scene.add(gltf.scene)
+                
+                // 输出动画信息
+                console.log('动画列表:')
+                gltf.animations.forEach((animation, index) => {
+                    console.log(`  ${index}: ${animation.name}`)
+                })
+                
+                // 创建简单的粒子系统测试
+                createSimpleParticleSystem(gltf.scene)
+                
+                // 自动调整相机位置
+                const box = new THREE.Box3().setFromObject(gltf.scene)
+                const center = box.getCenter(new THREE.Vector3())
+                const size = box.getSize(new THREE.Vector3())
+                
+                const maxDim = Math.max(size.x, size.y, size.z)
+                camera.position.set(center.x, center.y, center.z + maxDim * 2)
+                camera.lookAt(center)
+                
+                return gltf
+                
+            } catch (error) {
+                updateStatus('model-status', '加载失败: ' + error.message)
+                throw error
+            }
+        }
+
+        // 创建简单粒子系统
+        function createSimpleParticleSystem(model) {
+            try {
+                updateStatus('particle-status', '创建中...')
+                
+                // 从模型中提取顶点
+                const vertices = []
+                
+                model.traverse((child) => {
+                    if (child.isMesh && child.geometry) {
+                        const geometry = child.geometry
+                        const positionAttribute = geometry.attributes.position
+                        
+                        if (positionAttribute) {
+                            console.log(`找到网格: ${child.name}, 顶点数: ${positionAttribute.count}`)
+                            
+                            // 获取世界矩阵
+                            child.updateMatrixWorld()
+                            
+                            for (let i = 0; i < Math.min(positionAttribute.count, 10000); i++) {
+                                const vertex = new THREE.Vector3()
+                                vertex.fromBufferAttribute(positionAttribute, i)
+                                vertex.applyMatrix4(child.matrixWorld)
+                                vertices.push(vertex.x, vertex.y, vertex.z)
+                            }
+                        }
+                    }
+                })
+                
+                console.log(`提取到 ${vertices.length / 3} 个粒子`)
+                
+                if (vertices.length === 0) {
+                    updateStatus('particle-status', '无顶点数据')
+                    return
+                }
+                
+                // 创建粒子几何体
+                const particleGeometry = new THREE.BufferGeometry()
+                particleGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3))
+                
+                // 创建粒子材质
+                const particleMaterial = new THREE.PointsMaterial({
+                    color: 0x88ccff,
+                    size: 0.02,
+                    transparent: true,
+                    opacity: 0.8,
+                    blending: THREE.AdditiveBlending,
+                    depthWrite: false
+                })
+                
+                // 创建粒子系统
+                const particles = new THREE.Points(particleGeometry, particleMaterial)
+                scene.add(particles)
+                
+                updateStatus('particle-status', `${vertices.length / 3} 个粒子`)
+                
+                // 隐藏原模型
+                model.visible = false
+                
+            } catch (error) {
+                updateStatus('particle-status', '创建失败: ' + error.message)
+                console.error('粒子系统错误:', error)
+            }
+        }
+
+        // 渲染循环
+        function animate() {
+            requestAnimationFrame(animate)
+            renderer.render(scene, camera)
+        }
+
+        // 启动
+        updateStatus('status', '开始加载模型...')
+        loadModel()
+            .then(() => {
+                updateStatus('status', '全部加载完成')
+                updateStatus('animation-status', '渲染中')
+                animate()
+            })
+            .catch((error) => {
+                updateStatus('status', '加载失败: ' + error.message)
+                console.error('初始化失败:', error)
+            })
+
+        // 窗口大小调整
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight
+            camera.updateProjectionMatrix()
+            renderer.setSize(window.innerWidth, window.innerHeight)
+        })
+    </script>
+</body>
+</html>
