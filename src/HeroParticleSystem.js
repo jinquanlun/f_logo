@@ -22,9 +22,14 @@ export class HeroParticleSystem {
         this.animationActions = []
         this.customAnimationTime = 0
         this.smallestRingObjects = [] // Store references to smallest ring objects
-        
+
         // Enhanced animation control system
         this.animationSpeed = 1.0
+
+        // Animation completion state
+        this.isAnimationComplete = false
+        this.animationDuration = 0
+        this.onAnimationComplete = null // Callback function
         
         // Advanced particle behavior system
         this.mousePosition = new THREE.Vector3()
@@ -329,6 +334,9 @@ export class HeroParticleSystem {
 
                     action.play()
                 })
+
+                // Calculate total animation duration (use the longest clip)
+                this.animationDuration = Math.max(...this.animationActions.map(a => a.duration))
             }
             return
         }
@@ -364,6 +372,11 @@ export class HeroParticleSystem {
 
                 action.play()
             })
+
+            // Calculate total animation duration (use the longest clip)
+            if (this.animationActions.length > 0) {
+                this.animationDuration = Math.max(...this.animationActions.map(a => a.duration))
+            }
         }
     }
     
@@ -383,10 +396,24 @@ export class HeroParticleSystem {
         const safeDelta = Math.max(ultraSmoothDelta, 0.001)
 
         // Enhanced animation time management with dynamic speed control
-        const baseSpeed = 0.4
-        const dynamicSpeedVariation = Math.sin(this.customAnimationTime * 0.3) * 0.15 + 1.0
-        const finalSpeed = baseSpeed * this.animationSpeed * dynamicSpeedVariation
-        this.customAnimationTime += safeDelta * finalSpeed
+        if (!this.isAnimationComplete) {
+            const baseSpeed = 0.4
+            const dynamicSpeedVariation = Math.sin(this.customAnimationTime * 0.3) * 0.15 + 1.0
+            const finalSpeed = baseSpeed * this.animationSpeed * dynamicSpeedVariation
+            this.customAnimationTime += safeDelta * finalSpeed
+
+            // Check if animation is complete
+            if (this.animationDuration > 0 && this.customAnimationTime >= this.animationDuration) {
+                this.customAnimationTime = this.animationDuration
+                this.isAnimationComplete = true
+                console.log('🎬 Hero粒子动画播放完成')
+
+                // Trigger completion callback
+                if (this.onAnimationComplete) {
+                    this.onAnimationComplete()
+                }
+            }
+        }
 
         if (this.animationMixer && this.animationActions.length > 0) {
             // Save current state of smallest ring objects before animation update
@@ -402,9 +429,9 @@ export class HeroParticleSystem {
             this.updateAnimationBlending(ultraSmoothDelta)
             
             this.animationActions.forEach(({ action, duration }, index) => {
-                // Calculate smooth looping time with seamless transitions
-                const loopTime = this.customAnimationTime % duration
-                
+                // Use current animation time directly (no looping)
+                const animationTime = Math.min(this.customAnimationTime, duration)
+
                 // Apply blending weights based on current mode
                 let weight = 1.0
                 if (this.currentMode === this.animationModes.BLEND && this.animationActions.length > 1) {
@@ -416,13 +443,15 @@ export class HeroParticleSystem {
                         weight = 0.0
                     }
                 } else if (this.currentMode === this.animationModes.DYNAMIC) {
-                    // Dynamic weight based on time and animation characteristics
-                    const timePhase = (this.customAnimationTime / duration) % 1.0
-                    weight = 0.5 + 0.5 * Math.sin(timePhase * Math.PI * 2.0 + index * Math.PI * 0.5)
+                    // Dynamic weight based on time and animation characteristics (no looping)
+                    if (duration > 0) {
+                        const timePhase = Math.min(this.customAnimationTime / duration, 1.0)
+                        weight = 0.5 + 0.5 * Math.sin(timePhase * Math.PI * 2.0 + index * Math.PI * 0.5)
+                    }
                 }
-                
+
                 action.setEffectiveWeight(weight)
-                action.time = loopTime
+                action.time = animationTime
             })
 
             // Apply the time changes without automatic progression
@@ -506,11 +535,28 @@ export class HeroParticleSystem {
     setAnimationSpeed(speed) {
         this.animationSpeed = Math.max(0.1, Math.min(3.0, speed))
     }
-    
+
     setAnimationMode(mode) {
         if (Object.values(this.animationModes).includes(mode)) {
             this.currentMode = mode
         }
+    }
+
+    // Set callback function to be called when animation completes
+    setOnAnimationComplete(callback) {
+        this.onAnimationComplete = callback
+    }
+
+    // Check if animation is complete
+    isComplete() {
+        return this.isAnimationComplete
+    }
+
+    // Reset animation to start from beginning
+    resetAnimation() {
+        this.customAnimationTime = 0
+        this.isAnimationComplete = false
+        console.log('🔄 Hero粒子动画已重置')
     }
     
     blendToAnimation(primaryIndex, secondaryIndex = null) {

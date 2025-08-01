@@ -29,6 +29,7 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
 import { HeroParticleSystem } from './HeroParticleSystem.js'
+import { MasterAnimationController } from './MasterAnimationController.js'
 import { AnimationTrackExtractor } from './AnimationTrackExtractor.js'
 import { RingAnimationMapper } from './RingAnimationMapper.js'
 import { CameraAnimationMapper } from './CameraAnimationMapper.js'
@@ -65,10 +66,18 @@ class HeroParticleApp {
         // 获取HTML中的Canvas元素，作为WebGL渲染目标
         this.canvas = document.getElementById('three-canvas')
 
-        // 初始化多动画系统组件
+        // 初始化动画系统组件
+        this.masterController = null // 主动画控制器
         this.trackExtractor = new AnimationTrackExtractor()
-        this.ringMapper = null // 将在模型加载后初始化
-        this.cameraMapper = null // 将在场景初始化后创建
+        this.ringMapper = null // 圆环动画映射器
+        this.cameraMapper = null // 相机动画映射器
+
+        // Animation sequence control
+        this.animationSequenceState = {
+            heroComplete: false,
+            cameraAndRingStarted: false,
+            allComplete: false
+        }
 
         // 按顺序执行初始化流程
         this.init()              // 初始化Three.js基础组件
@@ -474,11 +483,15 @@ class HeroParticleApp {
             // Initialize ring animation mapper
             this.ringMapper = new RingAnimationMapper(this.scene, this.model)
 
-            // Load custom animation tracks
+            // Initialize master animation controller
+            this.masterController = new MasterAnimationController(this.camera, this.scene)
+            await this.masterController.loadMasterFile()
+
+            // Load custom animation tracks for rings
             await this.loadCustomAnimationTracks()
 
-            // Load custom camera tracks
-            await this.loadCustomCameraTracks()
+            // Setup animation sequence: Hero -> (Camera + Ring)
+            this.setupCombinedAnimationSequence()
 
         } catch (error) {
             console.error('Error loading model:', error)
@@ -492,183 +505,130 @@ class HeroParticleApp {
     async loadCustomAnimationTracks() {
         try {
             console.log('🎬 开始加载自定义动画轨迹...')
-            
+
             // 提取所有圆环的动画轨迹
             const extractedTracks = await this.trackExtractor.extractAllRingTracks()
-            
+
             if (extractedTracks.length > 0) {
                 // 将提取的轨迹数据转换为Map格式
                 const tracksMap = new Map()
                 extractedTracks.forEach(trackData => {
                     tracksMap.set(trackData.ringType, trackData)
                 })
-                
+
                 // 应用自定义轨迹到圆环
                 const success = this.ringMapper.applyCustomTracks(tracksMap)
-                
+
                 if (success) {
                     console.log('✅ 自定义动画轨迹加载成功!')
-                    
-                    // 输出加载状态摘要
-                    const summary = this.trackExtractor.getExtractionSummary()
-                    console.log('📊 轨迹提取摘要:', summary)
-                    
-                    const mapperStatus = this.ringMapper.getStatus()
-                    console.log('🎯 映射器状态:', mapperStatus)
                 } else {
                     console.warn('⚠️ 自定义动画轨迹应用失败')
                 }
             } else {
                 console.warn('⚠️ 没有找到有效的动画轨迹数据')
             }
-            
+
         } catch (error) {
             console.error('❌ 加载自定义动画轨迹失败:', error)
         }
     }
 
-    /**
-     * 加载自定义相机轨迹
-     * 从相机GLB文件中提取相机动画数据并应用
-     */
-    async loadCustomCameraTracks() {
-        try {
-            console.log('🎥 开始加载自定义相机轨迹...')
-            
-            if (!this.cameraMapper) {
-                console.warn('⚠️ 相机映射器未初始化')
-                return
-            }
 
-            // 提取相机动画轨迹
-            const cameraData = await this.cameraMapper.extractCameraTracks('/cam_cut2_v3cam.glb')
-            
-            if (cameraData && cameraData.hasAnimations) {
-                console.log('✅ 自定义相机轨迹加载成功!')
-                console.log('📊 相机轨迹摘要:', {
-                    animations: cameraData.animations.length,
-                    hasStaticCamera: !!cameraData.staticCamera,
-                    filePath: cameraData.filePath
-                })
-            } else {
-                console.warn('⚠️ 没有找到有效的相机动画轨迹')
-            }
-            
-        } catch (error) {
-            console.error('❌ 加载自定义相机轨迹失败:', error)
-        }
-    }
 
     /**
-     * 切换相机模式
-     * @param {boolean} useCustomCamera 是否使用自定义相机轨迹
+     * Setup combined animation sequence control
+     * Hero animation -> (Camera + Ring animations together) -> Complete
      */
-    toggleCameraMode(useCustomCamera = null) {
-        if (!this.cameraMapper) {
-            console.warn('⚠️ 相机映射器未初始化')
+    setupCombinedAnimationSequence() {
+        if (!this.particleSystem || !this.masterController || !this.ringMapper) {
+            console.warn('⚠️ 动画系统未完全初始化，无法设置序列控制')
             return
         }
 
-        const status = this.cameraMapper.getStatus()
-        
-        if (useCustomCamera === null) {
-            // 自动切换
-            useCustomCamera = !status.isUsingCustomCamera
-        }
+        // Set callback for when Hero animation completes
+        this.particleSystem.setOnAnimationComplete(() => {
+            console.log('🎬 Hero动画完成，准备同时启动相机和圆环动画...')
+            this.animationSequenceState.heroComplete = true
 
-        if (useCustomCamera && status.hasCustomTracks) {
-            // 使用自定义相机轨迹
-            this.cameraMapper.applyCustomCameraTracks()
-            console.log('🎥 切换到自定义相机轨迹')
-        } else {
-            // 恢复原始相机状态
-            this.cameraMapper.restoreOriginalCamera()
-            console.log('🔄 切换到电影级相机系统')
-        }
+            // Start both camera and ring animations simultaneously
+            setTimeout(() => {
+                let cameraStarted = false
+                let ringStarted = false
+
+                // Start camera animation
+                if (this.masterController.startMasterAnimation()) {
+                    cameraStarted = true
+                    console.log('� 相机动画已启动')
+                } else {
+                    console.warn('⚠️ 相机动画启动失败')
+                }
+
+                // Start ring animation
+                if (this.ringMapper.startAnimation()) {
+                    ringStarted = true
+                    console.log('🔄 圆环动画已启动')
+                } else {
+                    console.warn('⚠️ 圆环动画启动失败')
+                }
+
+                if (cameraStarted || ringStarted) {
+                    this.animationSequenceState.cameraAndRingStarted = true
+                    console.log('✨ 相机和圆环动画同时进行中...')
+                }
+            }, 500) // 0.5 second delay for smooth transition
+        })
+
+        console.log('🎬 组合动画序列控制已设置：Hero -> (Camera + Ring) -> 完成')
     }
 
     /**
-     * 切换动画模式
-     * @param {boolean} useCustomTracks 是否使用自定义轨迹
+     * Reset the entire animation sequence
      */
-    toggleAnimationMode(useCustomTracks = null) {
-        if (!this.ringMapper) {
-            console.warn('⚠️ 圆环映射器未初始化')
-            return
+    resetAnimationSequence() {
+        console.log('🔄 重置动画序列...')
+
+        // Reset sequence state
+        this.animationSequenceState = {
+            heroComplete: false,
+            cameraAndRingStarted: false,
+            allComplete: false
         }
 
-        if (useCustomTracks === null) {
-            // 自动切换
-            const status = this.ringMapper.getStatus()
-            useCustomTracks = !status.isUsingCustomTracks
+        // Reset individual animations
+        if (this.particleSystem) {
+            this.particleSystem.resetAnimation()
         }
 
-        if (useCustomTracks) {
-            // 使用自定义轨迹（已在loadCustomAnimationTracks中应用）
-            console.log('🎭 切换到自定义动画轨迹')
-        } else {
-            // 恢复原始轨迹
-            this.ringMapper.restoreOriginalAnimation()
-            console.log('🔄 切换到原始动画轨迹')
+        if (this.masterController) {
+            this.masterController.hasCompleted = false
+            this.masterController.isPlaying = false
+            this.masterController.masterTime = 0
         }
+
+        if (this.ringMapper) {
+            this.ringMapper.resetAnimation()
+        }
+
+        console.log('✅ 动画序列已重置，可以重新播放')
     }
 
     /**
-     * 动态更新雾效设置
-     * 根据相机模式和距离调整雾效，确保圆环始终可见
+     * Get current animation sequence status
      */
-    updateDynamicFog() {
-        if (!this.cameraMapper || !this.scene.fog) return
-
-        const cameraStatus = this.cameraMapper.getStatus()
-        
-        if (cameraStatus.isUsingCustomCamera) {
-            // 使用自定义相机轨迹时，根据相机距离动态调整雾效
-            const cameraDistance = this.camera.position.length()
-            
-            // 动态计算雾效参数，确保在最远距离时圆环仍然可见
-            const baseFogNear = 10
-            const baseFogFar = 100
-            
-            // 根据相机距离扩展雾效范围
-            const distanceMultiplier = Math.max(1.0, cameraDistance / 50.0)
-            const newFogNear = baseFogNear * distanceMultiplier
-            const newFogFar = baseFogFar * distanceMultiplier * 2 // 远平面扩展更多
-            
-            this.scene.fog.near = newFogNear
-            this.scene.fog.far = newFogFar
-            
-            // 同时更新粒子系统中的雾效参数
-            if (this.particleSystem && this.particleSystem.particleMaterial && this.particleSystem.particleMaterial.uniforms) {
-                if (this.particleSystem.particleMaterial.uniforms.uFogNear) {
-                    this.particleSystem.particleMaterial.uniforms.uFogNear.value = newFogNear
-                }
-                if (this.particleSystem.particleMaterial.uniforms.uFogFar) {
-                    this.particleSystem.particleMaterial.uniforms.uFogFar.value = newFogFar
-                }
-            }
-            
-            // 调试信息 - 每秒输出一次
-            if (!this.lastFogDebugTime || Date.now() - this.lastFogDebugTime > 1000) {
-                console.log(`🌫️ 动态雾效: 相机距离=${cameraDistance.toFixed(1)}, 雾效范围=[${newFogNear.toFixed(1)}, ${newFogFar.toFixed(1)}]`)
-                this.lastFogDebugTime = Date.now()
-            }
-            
-        } else {
-            // 恢复到默认雾效设置
-            this.scene.fog.near = 10
-            this.scene.fog.far = 100
-            
-            if (this.particleSystem && this.particleSystem.particleMaterial && this.particleSystem.particleMaterial.uniforms) {
-                if (this.particleSystem.particleMaterial.uniforms.uFogNear) {
-                    this.particleSystem.particleMaterial.uniforms.uFogNear.value = 10.0
-                }
-                if (this.particleSystem.particleMaterial.uniforms.uFogFar) {
-                    this.particleSystem.particleMaterial.uniforms.uFogFar.value = 100.0
-                }
-            }
+    getAnimationSequenceStatus() {
+        return {
+            ...this.animationSequenceState,
+            heroAnimationTime: this.particleSystem ? this.particleSystem.customAnimationTime : 0,
+            cameraAnimationTime: this.masterController ? this.masterController.getCurrentTime() : 0,
+            ringAnimationTime: this.ringMapper ? this.ringMapper.customAnimationTime : 0,
+            cameraAnimationComplete: this.masterController ? this.masterController.isAnimationComplete() : false,
+            ringAnimationComplete: this.ringMapper ? this.ringMapper.isComplete() : false
         }
     }
+
+
+
+
     
     fitCameraToModel() {
         if (!this.model) return
@@ -753,37 +713,9 @@ class HeroParticleApp {
         // Keyboard shortcuts for animation and camera control
         window.addEventListener('keydown', (event) => {
             switch(event.key.toLowerCase()) {
-                case 'space':
-                    event.preventDefault()
-                    this.toggleAnimationMode()
-                    break
-                case 'c':
-                    event.preventDefault()
-                    this.toggleCameraMode()
-                    break
                 case '1':
                     console.log('🎯 显示当前状态')
-                    if (this.ringMapper) {
-                        console.log('圆环映射器状态:', this.ringMapper.getStatus())
-                    }
-                    if (this.cameraMapper) {
-                        console.log('相机映射器状态:', this.cameraMapper.getStatus())
-                    }
-                    if (this.trackExtractor) {
-                        console.log('轨迹提取器摘要:', this.trackExtractor.getExtractionSummary())
-                    }
-                    break
-                case '2':
-                    this.toggleAnimationMode(true) // 强制使用自定义圆环轨迹
-                    break
-                case '3':
-                    this.toggleAnimationMode(false) // 强制使用原始圆环轨迹
-                    break
-                case '4':
-                    this.toggleCameraMode(true) // 强制使用自定义相机轨迹
-                    break
-                case '5':
-                    this.toggleCameraMode(false) // 强制使用电影级相机
+                    console.log('动画序列状态:', this.getAnimationSequenceStatus())
                     break
                 case 'arrowright':
                     // 加速动画
@@ -804,6 +736,16 @@ class HeroParticleApp {
                     if (this.cameraMapper) {
                         this.cameraMapper.togglePause()
                     }
+                    break
+                case 'r':
+                    // 重置动画序列
+                    event.preventDefault()
+                    this.resetAnimationSequence()
+                    break
+                case 's':
+                    // 显示动画序列状态
+                    event.preventDefault()
+                    console.log('🎬 动画序列状态:', this.getAnimationSequenceStatus())
                     break
             }
         })
@@ -862,17 +804,25 @@ class HeroParticleApp {
         // 使用0.95的衰减系数，实现平滑的交互效果消退
         this.mouseStrength *= 0.95
         
-        // 更新自定义圆环动画轨迹
+        // 更新主动画控制器（相机动画）
+        if (this.masterController) {
+            this.masterController.update(deltaTime)
+        }
+
+        // 更新圆环动画
         if (this.ringMapper) {
             this.ringMapper.updateCustomAnimation(deltaTime)
         }
 
-        // 更新自定义相机动画轨迹
-        if (this.cameraMapper) {
-            this.cameraMapper.updateCustomCamera(deltaTime)
-            
-            // 动态调整雾效以确保圆环在相机轨迹中始终可见
-            this.updateDynamicFog()
+        // Check if both camera and ring animations are complete
+        if (this.masterController && this.ringMapper && !this.animationSequenceState.allComplete) {
+            const cameraComplete = this.masterController.isAnimationComplete()
+            const ringComplete = this.ringMapper.isComplete()
+
+            if (cameraComplete && ringComplete) {
+                this.animationSequenceState.allComplete = true
+                console.log('✅ 整个动画序列播放完成！(相机+圆环)')
+            }
         }
         
         // 更新粒子系统：先传递鼠标交互参数，再执行系统更新

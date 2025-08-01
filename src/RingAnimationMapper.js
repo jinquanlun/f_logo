@@ -26,6 +26,11 @@ export class RingAnimationMapper {
         this.currentActions = new Map()
         this.isUsingCustomTracks = false
         this.customAnimationTime = 0
+
+        // Animation completion state
+        this.isAnimationComplete = false
+        this.animationDuration = 0
+        this.onAnimationComplete = null // Callback function
         
         // 轨迹数据存储
         this.customTracks = new Map()
@@ -128,7 +133,21 @@ export class RingAnimationMapper {
 
         this.isUsingCustomTracks = appliedCount > 0
         this.customAnimationTime = 0
-        
+        this.isAnimationComplete = false
+
+        // Calculate total animation duration (use the longest animation)
+        if (appliedCount > 0) {
+            let maxDuration = 0
+            this.customTracks.forEach((trackInfo) => {
+                if (trackInfo.trackData.animations && trackInfo.trackData.animations.length > 0) {
+                    const duration = trackInfo.trackData.animations[trackInfo.currentAnimation].duration
+                    maxDuration = Math.max(maxDuration, duration)
+                }
+            })
+            this.animationDuration = maxDuration
+            console.log(`📏 圆环动画总时长: ${this.animationDuration.toFixed(2)}秒`)
+        }
+
         console.log(`🎉 自定义轨迹应用完成，${appliedCount} 个圆环将使用新轨迹`)
         return appliedCount > 0
     }
@@ -138,12 +157,24 @@ export class RingAnimationMapper {
      * @param {number} deltaTime 时间增量
      */
     updateCustomAnimation(deltaTime) {
-        if (!this.isUsingCustomTracks || this.customTracks.size === 0) {
+        if (!this.isUsingCustomTracks || this.customTracks.size === 0 || this.isAnimationComplete) {
             return
         }
 
         // 更新动画时间
         this.customAnimationTime += deltaTime
+
+        // Check if animation is complete
+        if (this.animationDuration > 0 && this.customAnimationTime >= this.animationDuration) {
+            this.customAnimationTime = this.animationDuration
+            this.isAnimationComplete = true
+            console.log('🎬 圆环动画播放完成')
+
+            // Trigger completion callback
+            if (this.onAnimationComplete) {
+                this.onAnimationComplete()
+            }
+        }
 
         // 应用每个圆环的动画
         this.customTracks.forEach((trackInfo, ringType) => {
@@ -163,13 +194,13 @@ export class RingAnimationMapper {
 
         const animation = trackData.animations[currentAnimation]
         const duration = animation.duration
-        
-        // 循环播放动画
-        const loopTime = currentTime % duration
+
+        // 使用当前时间，不循环播放
+        const animationTime = Math.min(currentTime, duration)
         
         // 应用位置轨迹
         if (animation.tracks.position) {
-            const position = this.interpolateTrack(animation.tracks.position, loopTime)
+            const position = this.interpolateTrack(animation.tracks.position, animationTime)
             if (position) {
                 ringObject.position.set(position.x, position.y, position.z)
             }
@@ -177,7 +208,7 @@ export class RingAnimationMapper {
 
         // 应用四元数旋转轨迹
         if (animation.tracks.quaternion) {
-            const quaternion = this.interpolateQuaternionTrack(animation.tracks.quaternion, loopTime)
+            const quaternion = this.interpolateQuaternionTrack(animation.tracks.quaternion, animationTime)
             if (quaternion) {
                 ringObject.quaternion.set(quaternion.x, quaternion.y, quaternion.z, quaternion.w)
             }
@@ -185,7 +216,7 @@ export class RingAnimationMapper {
 
         // 应用欧拉角旋转轨迹（如果没有四元数轨迹）
         if (!animation.tracks.quaternion && animation.tracks.rotation) {
-            const rotation = this.interpolateTrack(animation.tracks.rotation, loopTime)
+            const rotation = this.interpolateTrack(animation.tracks.rotation, animationTime)
             if (rotation) {
                 ringObject.rotation.set(rotation.x, rotation.y, rotation.z)
             }
@@ -193,7 +224,7 @@ export class RingAnimationMapper {
 
         // 应用缩放轨迹
         if (animation.tracks.scale) {
-            const scale = this.interpolateTrack(animation.tracks.scale, loopTime)
+            const scale = this.interpolateTrack(animation.tracks.scale, animationTime)
             if (scale) {
                 ringObject.scale.set(scale.x, scale.y, scale.z)
             }
@@ -367,6 +398,43 @@ export class RingAnimationMapper {
     togglePause() {
         this.isPaused = !this.isPaused
         return this.isPaused
+    }
+
+    /**
+     * Set callback function to be called when animation completes
+     */
+    setOnAnimationComplete(callback) {
+        this.onAnimationComplete = callback
+    }
+
+    /**
+     * Check if animation is complete
+     */
+    isComplete() {
+        return this.isAnimationComplete
+    }
+
+    /**
+     * Reset animation to start from beginning
+     */
+    resetAnimation() {
+        this.customAnimationTime = 0
+        this.isAnimationComplete = false
+        console.log('🔄 圆环动画已重置')
+    }
+
+    /**
+     * Start ring animation (used for sequencing)
+     */
+    startAnimation() {
+        if (!this.isUsingCustomTracks) {
+            console.warn('⚠️ 没有自定义轨迹可播放')
+            return false
+        }
+
+        this.resetAnimation()
+        console.log('🎬 开始播放圆环动画')
+        return true
     }
 
     /**
